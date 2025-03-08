@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
-
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -44,9 +44,13 @@ INSTALLED_APPS = [
     'model_testing',
     'model_evaluation',
     'report_generation',
+    'jailbreak_evaluation',
+    'channels',
+    'corsheaders'
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -78,12 +82,14 @@ WSGI_APPLICATION = "ai_evaluation.wsgi.application"
 
 
 # Database
-# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": "ai",  # 替换为你的数据库名称
+        "USER": "root",        # 替换为你的数据库用户名
+        "PASSWORD": "123456",    # 替换为你的数据库密码
+        "HOST": "127.0.0.1",            # 或者使用你的数据库主机地址
+        "PORT": "3306",                  # MySQL 默认端口
     }
 }
 
@@ -110,7 +116,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+# LANGUAGE_CODE = "en-us"
 
 TIME_ZONE = "UTC"
 
@@ -128,3 +134,29 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+#跨域请求配置
+CORS_ORIGIN_WHITELIST = (
+    'http://localhost:3000',
+    'http://localhost:63342',
+)
+
+#语言和媒体访问
+LANGUAGE_CODE = 'zh-hans'
+
+
+# 添加 ASGI 应用
+ASGI_APPLICATION = 'ai_evaluation.asgi.application'
+
+# 配置 Channel Layers
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
+
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+worker_pool = 'solo'
