@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     'report_generation',
     'jailbreak_evaluation',
     'channels',
-    'corsheaders'
+    'corsheaders',
     "users",
     'projects',
     'members',
