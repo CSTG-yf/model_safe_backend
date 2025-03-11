@@ -4,7 +4,7 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'score-records', views.ScoreHistoryViewSet, basename='score-records')
-router.register(r'iteration-records', views.IterationRecordViewSet, basename='iteration-records')
+# router.register(r'iteration-records', views.IterationRecordViewSet, basename='iteration-records')
 
 urlpatterns = [
     path('', include(router.urls)),

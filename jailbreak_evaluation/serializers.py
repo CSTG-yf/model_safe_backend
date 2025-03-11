@@ -6,7 +6,7 @@ class ScoreRecordSerializer(serializers.ModelSerializer):
         model = ScoreRecord
         fields = '__all__'
 
-class IterationRecordSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = IterationRecord
-        fields = '__all__'
+# class IterationRecordSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = IterationRecord
+#         fields = '__all__'

@@ -1,0 +1,41 @@
+from django.db import models
+from django.core.serializers.json import DjangoJSONEncoder
+
+
+class JailbreakQuestion(models.Model):
+    category_index = models.IntegerField(primary_key=True)
+    title_index = models.IntegerField()
+    prompt_num = models.IntegerField()
+    prompt = models.TextField()
+    starting_string = models.TextField()
+
+    class Meta:
+        db_table = 'new_jailbreak'
+        unique_together = ('category_index', 'title_index', 'prompt_num')
+
+
+class ScoreRecord(models.Model):
+    session_id = models.TextField(primary_key=True)
+    ev_id = models.TextField()
+    session_name = models.TextField()
+    category_index = models.IntegerField()
+    title_index = models.IntegerField()
+    content_index = models.IntegerField()
+    avg_score = models.IntegerField()
+    history = models.JSONField(encoder=DjangoJSONEncoder)
+
+    class Meta:
+        db_table = 'new_content_avg_score'
+        unique_together = ('session_id', 'ev_id')
+
+
+# class IterationRecord(models.Model):
+#     category_index = models.IntegerField(primary_key=True)
+#     title_index = models.IntegerField()
+#     prompt_num = models.IntegerField()
+#     cycle_num = models.IntegerField()
+#     score_info = models.JSONField(encoder=DjangoJSONEncoder)
+#
+#     class Meta:
+#         db_table = 'iterate_stream'
+#         unique_together = ('category_index', 'title_index', 'prompt_num', 'cycle_num')

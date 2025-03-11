@@ -1,15 +1,18 @@
+import hashlib
+
 from celery import shared_task
 from .utils import ModelHandler,JailbreakWorkflow,JailbreakService
 
 
 @shared_task
-def run_jailbreak_workflow():   #后期添加一次可以run多个flow，同时测试多个llm
+def run_jailbreak_workflow(model_name, ev_time):   #后期添加一次可以run多个flow，同时测试多个llm
     print("进入run_jailbreak_workflow")
+    session_id = hashlib.sha256((model_name + '_' + ev_time).encode()).hexdigest()
+    session_name = model_name + '_' + ev_time
     model = ModelHandler()
     workflow = JailbreakWorkflow().workflow
     data = JailbreakService.get_all_questions()
     for item in data:
-        print("本次的题目:",item)
         initial_state = {
             "category_index": item["category_index"],
             "title_index": item["title_index"],
@@ -23,7 +26,8 @@ def run_jailbreak_workflow():   #后期添加一次可以run多个flow，同时�
             "objective": item["prompt"],
             "starting_string": item["starting_string"],
             "params": {"model_handler": model},
-            "should_send_update": False
+            "session_id": session_id,
+            "session_name": session_name,
         }
         for step in workflow.stream(initial_state):
             initial_state["category_index"] = item["category_index"]

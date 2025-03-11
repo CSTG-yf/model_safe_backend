@@ -22,25 +22,19 @@ class JailbreakService:
     def save_score_record(data):
         """保存评分记录"""
         try:
-            # 尝试获取现有记录
-            record = ScoreRecord.objects.get(
-                category_index=data["category_index"],
-                title_index=data["title_index"],
-                content_index=data["prompt_num"]
-            )
-            # 更新现有记录
-            record.avg_score = data["average_score"]
-            record.history = data["history"]
-            record.save()
-        except ScoreRecord.DoesNotExist:
-            # 如果记录不存在，则创建新记录
-            ScoreRecord.objects.create(
+            ScoreRecord.objects.update_or_create(
+                session_id= data['session_id'],
+                ev_id=data['ev_id'],
+                session_name=data['session_name'],
                 category_index=data["category_index"],
                 title_index=data["title_index"],
                 content_index=data["prompt_num"],
                 avg_score=data["average_score"],
                 history=data["history"]
             )
+        except Exception as e:
+            print("保存评分记录时出错:", e)
+            return None
 
     @staticmethod
     def get_all_score_records():
@@ -51,49 +45,51 @@ class JailbreakService:
             return []
 
     @staticmethod
-    def get_score_history(category_index, title_index, prompt_num):
+    def get_score_history(session_id):
         """获取评分历史"""
         try:
             record = ScoreRecord.objects.get(
-                category_index=category_index,
-                title_index=title_index,
-                content_index=prompt_num
+                session_id=session_id
             )
             return record.history
         except ObjectDoesNotExist:
             return []
 
-    @staticmethod
-    def save_iteration(data):
-        """保存迭代记录"""
-        IterationRecord.objects.update_or_create(
-            category_index=data["category_index"],
-            title_index=data["title_index"],
-            prompt_num=data["prompt_num"],
-            cycle_num=data["current_cycle"],
-            score_info=data["latest_entry"]
-        )
+    # @staticmethod
+    # def save_iteration(data):
+    #     """保存迭代记录"""
+    #     try:
+    #         IterationRecord.objects.update_or_create(
+    #             category_index=data["category_index"],
+    #             title_index=data["title_index"],
+    #             prompt_num=data["prompt_num"],
+    #             cycle_num=data["current_cycle"],
+    #             score_info=data["latest_entry"]
+    #         )
+    #     except Exception as e:
+    #         print("保存迭代记录时出错:", e)
+    #         return None
 
 
-    @staticmethod
-    def get_all_iterations():
-        try:
-            record = list(IterationRecord.objects.all().values(
-            'category_index', 'title_index', 'prompt_num',
-            'cycle_num', 'score_info'
-        ))
-            return record
-        except ObjectDoesNotExist:
-            return []
+    # @staticmethod
+    # def get_all_iterations():
+    #     try:
+    #         record = list(IterationRecord.objects.all().values(
+    #         'category_index', 'title_index', 'prompt_num',
+    #         'cycle_num', 'score_info'
+    #     ))
+    #         return record
+    #     except ObjectDoesNotExist:
+    #         return []
 
-    @staticmethod
-    def get_iteration_history(category_index, title_index, prompt_num):
-        """获取迭代历史"""
-        return list(IterationRecord.objects.filter(
-            category_index=category_index,
-            title_index=title_index,
-            prompt_num=prompt_num
-        ).order_by('cycle_num').values('cycle_num', 'score_info'))
+    # @staticmethod
+    # def get_iteration_history(category_index, title_index, prompt_num):
+    #     """获取迭代历史"""
+    #     return list(IterationRecord.objects.filter(
+    #         category_index=category_index,
+    #         title_index=title_index,
+    #         prompt_num=prompt_num
+    #     ).order_by('cycle_num').values('cycle_num', 'score_info'))
 
 #调用模型
 class ModelHandler:
@@ -386,6 +382,8 @@ class GraphState(TypedDict):    #状态管理类，每次迭代都要使用到�
     objective: str
     starting_string: str
     params: Dict
+    session_id: str
+    session_name: str
 
 
 def extract_prompt(response):  # 获取攻击模型的new_prompt
@@ -466,18 +464,18 @@ def update_history(state: GraphState) -> GraphState:
             }
 
     #通过websocket发送message
-    # task_id = f"model_name + time"
+    # task_id = state['session_name']
     ProgressConsumer.send_message(message)
     # ProgressConsumer.send_message(message, task_id)
 
     #保存到数据库
-    JailbreakService.save_iteration({
-        "category_index": state["category_index"],
-        "title_index": state["title_index"],
-        "prompt_num": state["prompt_num"],
-        "current_cycle": state["cycle_count"] + 1,
-        "latest_entry": new_entry,
-    })
+    # JailbreakService.save_iteration({
+    #     "category_index": state["category_index"],
+    #     "title_index": state["title_index"],
+    #     "prompt_num": state["prompt_num"],
+    #     "current_cycle": state["cycle_count"] + 1,
+    #     "latest_entry": new_entry,
+    # })
 
     return {"history": new_history,
             "cycle_count": state["cycle_count"] + 1,
@@ -505,11 +503,17 @@ def compute_score(state: GraphState):
     print("完成一次总评分\n", message)
 
     #通过websocket发送message
-    # task_id = f"model_name + time"
+    task_id = state["session_name"]
     ProgressConsumer.send_message(message)
-    
+    # ProgressConsumer.send_message(message,task_id=task_id)
+
+    #hash
+    ev_id = state["category_index"] + state["title_index"] + state["prompt_num"]
     #保存到数据库
     JailbreakService.save_score_record({
+            "session_id": state["session_id"],
+            "ev_id": ev_id,
+            "session_name": state["session_name"],
             "category_index":state["category_index"],
             "title_index":state["title_index"],
             "prompt_num": state["prompt_num"],
