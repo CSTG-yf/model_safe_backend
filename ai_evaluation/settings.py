@@ -47,8 +47,19 @@ INSTALLED_APPS = [
     'jailbreak_evaluation',
     'channels',
     'corsheaders'
-]
+    "users",
+    'projects',
+    'members',
 
+]
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',  # 默认要求所有 API 需要认证
+    ),
+}
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -82,14 +93,17 @@ WSGI_APPLICATION = "ai_evaluation.wsgi.application"
 
 
 # Database
+# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "ai",  # 替换为你的数据库名称
-        "USER": "root",        # 替换为你的数据库用户名
-        "PASSWORD": "123456",    # 替换为你的数据库密码
-        "HOST": "127.0.0.1",            # 或者使用你的数据库主机地址
-        "PORT": "3306",                  # MySQL 默认端口
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',  # 使用 MySQL
+        'NAME': 'ai',  # 数据库名
+        'USER': 'root',  # MySQL 用户
+        'PASSWORD': '123456',  # MySQL 密码
+        'HOST': 'localhost',  # 数据库地址
+        'PORT': '3306',  # MySQL 端口
+        'OPTIONS': {'charset': 'utf8mb4'},
     }
 }
 
@@ -135,28 +149,10 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+AUTH_USER_MODEL = 'users.User'
+
 #跨域请求配置
 CORS_ORIGIN_WHITELIST = (
     'http://localhost:3000',
     'http://localhost:63342',
 )
-
-#语言和媒体访问
-LANGUAGE_CODE = 'zh-hans'
-
-
-# 添加 ASGI 应用
-ASGI_APPLICATION = 'ai_evaluation.asgi.application'
-
-# 配置 Channel Layers
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
-        },
-    },
-}
-
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-worker_pool = 'solo'

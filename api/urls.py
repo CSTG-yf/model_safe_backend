@@ -6,4 +6,7 @@ urlpatterns = [
     # path('model-evaluation/', include('model_evaluation.urls')),  # 评估 API（预留）
     path('jailbreak-evaluation/', include('jailbreak_evaluation.urls')),
     # path('report-generation/', include('report_generation.urls')),  # 报告 API（预留）
+    path("users/", include("users.urls")),
+    path('projects/', include('projects.urls')),
+
 ]
