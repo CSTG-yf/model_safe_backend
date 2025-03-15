@@ -1,10 +1,10 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import MasterQuestionViewSet, EvaluationQuestionBankViewSet
+from .views import EvaluationQuestionsViewSet
 
 router = DefaultRouter()
-router.register(r'master-questions', MasterQuestionViewSet, basename='master-questions')
-router.register(r'evaluation-banks', EvaluationQuestionBankViewSet, basename='evaluation-banks')
+router.register(r'eval_questions', EvaluationQuestionsViewSet, basename='master-questions')
+
 
 urlpatterns = [
     path('', include(router.urls)),
