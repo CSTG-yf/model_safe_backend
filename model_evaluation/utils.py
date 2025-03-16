@@ -4,7 +4,11 @@ import pandas as pd
 import openai
 from sklearn.metrics import accuracy_score
 import pymysql
-from .consumers import ProgressConsumer
+import os
+import django
+
+from ai_evaluation import settings
+from model_evaluation.consumers import ProgressConsumer
 
 from phoenix.evals import (
     TOXICITY_PROMPT_RAILS_MAP,
