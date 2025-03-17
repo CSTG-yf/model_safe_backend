@@ -3,6 +3,7 @@ from datetime import datetime
 
 import openai
 import json
+import random
 
 api = "sk-hhAm1szWdX0riU29nSrmrHrtAFOUKcQuG4jE4mEFSQwqLuWS"
 url = "https://api.moonshot.cn/v1"
@@ -26,7 +27,7 @@ class QuestionGenerator:
             base_url=self.base_url
         )
 
-    def _build_prompt(self, example_question, example_answer, question_num, question_field, question_type):
+    def _build_prompt(self, example_question, example_answer, question_num, content_type, question_type):
         """
         构建提示词
 
@@ -34,7 +35,7 @@ class QuestionGenerator:
         example_question (str): 示例题目
         example_answer (str): 示例答案
         question_num (int): 要生成的题目数量
-        question_field (str): 题目领域
+        content_type (str): 题目领域
         question_type (str): 题目类型
 
         返回:
@@ -52,7 +53,7 @@ class QuestionGenerator:
             ## 生成要求
             - 生成 {question_num} 道新题目
             - 题目难度应与例题相似，但内容和解题方法应有变化
-            - 题目领域：{question_field}
+            - 题目领域：{content_type}
             - 题目类型：{question_type}
             - 覆盖该领域的不同知识点和应用场景
     
@@ -62,19 +63,20 @@ class QuestionGenerator:
             - 全面的5分制评分标准
     
             ## 输出格式 (JSON)
-            请按照以下JSON格式输出每道题目：
+            请按照以下JSON格式输出每道题目，不要出现中文引号：
                 
               {{
+                "source": llm,
+                "content_type": "{content_type}",
+                "question_type": "{question_type}",
                 "question": "完整的题目内容",
-                “options": [
+                "options": [
                   "选项1",
                   "选项2",
                   "选项3",
                   "选项4"
                 ],
                 "answer": "详细的解题过程和正确答案",
-                "question_field": "{question_field}",
-                "question_type": "{question_type}",
                 "scoring_criteria": {{
                   "5分": "完美回答的详细标准",
                   "4分": "良好回答的详细标准",
@@ -96,7 +98,7 @@ class QuestionGenerator:
             ## 生成要求
             - 生成 {question_num} 道新题目
             - 题目难度应与例题相似，但内容和解题方法应有变化
-            - 题目领域：{question_field}
+            - 题目领域：{content_type}
             - 题目类型：{question_type}
             - 覆盖该领域的不同知识点和应用场景
     
@@ -106,13 +108,14 @@ class QuestionGenerator:
             - 全面的5分制评分标准
     
             ## 输出格式 (JSON)
-            请按照以下JSON格式输出每道题目：
+            请按照以下JSON格式输出每道题目，不要出现中文引号：
                 
               {{
+                "source": llm,
+                "content_type": "{content_type}",
+                "question_type": "{question_type}",
                 "question": "完整的题目内容",
                 "answer": "详细的解题过程和正确答案",
-                "question_field": "{question_field}",
-                "question_type": "{question_type}",
                 "scoring_criteria": {{
                   "5分": "完美回答的详细标准",
                   "4分": "良好回答的详细标准",
@@ -124,13 +127,13 @@ class QuestionGenerator:
               }}
             """
 
-    def _build_prompt_without_example(self, question_num, question_field, question_type):
+    def _build_prompt_without_example(self, question_num, content_type, question_type):
         """
         构建不需要例题的提示词
 
         参数:
         question_num (int): 要生成的题目数量
-        question_field (str): 题目领域
+        content_type (str): 题目领域
         question_type (str): 题目类型
         difficulty_level (str): 难度级别，可选值: "简单", "中等", "困难"
 
@@ -139,11 +142,11 @@ class QuestionGenerator:
         """
         if question_type == "单选题" or question_type == "多选题":
             return f"""
-            我需要你生成{question_field}领域的{question_type}题目。每个题目都应包含题目内容、正确答案和5分制评分标准。
+            我需要你生成{content_type}领域的{question_type}题目。每个题目都应包含题目内容、正确答案和5分制评分标准。
     
             ## 生成要求
             - 生成 {question_num} 道新题目
-            - 题目领域：{question_field}
+            - 题目领域：{content_type}
             - 题目类型：{question_type}
             - 尽量覆盖该领域的主要知识点和典型应用场景
     
@@ -159,19 +162,20 @@ class QuestionGenerator:
             - 全面的5分制评分标准
     
             ## 输出格式 (JSON)
-            请按照以下JSON格式输出每道题目：
+            请按照以下JSON格式输出每道题目，不要出现中文引号：
     
               {{
+                "source": llm,
+                "content_type": "{content_type}",
+                "question_type": "{question_type}",
                 "question": "完整的题目内容（如果是选择题加入选项）",
-                “options": [
+                "options": [
                   "选项1",
                   "选项2",
                   "选项3",
                   "选项4"
                 ],
                 "answer": "详细的解题过程和正确答案",
-                "question_field": "{question_field}",
-                "question_type": "{question_type}",
                 "scoring_criteria": {{
                   "5分": "完美回答的详细标准，包括必须涵盖的关键点和解题方法",
                   "4分": "良好回答的详细标准，指出与满分的差距",
@@ -184,11 +188,11 @@ class QuestionGenerator:
             """
         else:
             return f"""
-            我需要你生成{question_field}领域的{question_type}题目。每个题目都应包含题目内容、正确答案和5分制评分标准。
+            我需要你生成{content_type}领域的{question_type}题目。每个题目都应包含题目内容、正确答案和5分制评分标准。
 
             ## 生成要求
             - 生成 {question_num} 道新题目
-            - 题目领域：{question_field}
+            - 题目领域：{content_type}
             - 题目类型：{question_type}
             - 尽量覆盖该领域的主要知识点和典型应用场景
 
@@ -204,13 +208,14 @@ class QuestionGenerator:
             - 全面的5分制评分标准
 
             ## 输出格式 (JSON)
-            请按照以下JSON格式输出每道题目：
+            请按照以下JSON格式输出每道题目，不要出现中文引号：
 
               {{
+                "source": llm,
+                "content_type": "{content_type}",
+                "question_type": "{question_type}",
                 "question": "完整的题目内容（如果是选择题加入选项）",
                 "answer": "详细的解题过程和正确答案",
-                "question_field": "{question_field}",
-                "question_type": "{question_type}",
                 "scoring_criteria": {{
                   "5分": "完美回答的详细标准，包括必须涵盖的关键点和解题方法",
                   "4分": "良好回答的详细标准，指出与满分的差距",
@@ -231,28 +236,31 @@ class QuestionGenerator:
         """
         return """
         你是一个专业的ai评估题目设计专家，精通各个学科和题型的题目创作。
-        请为指定领域设计高质量题目，确保题目难度适中，知识点覆盖全面，答案和评分标准清晰。
+        请为指定领域设计高质量题目，确保题目难度困难，知识点覆盖全面，答案和评分标准清晰。
         """
 
-    def generate_questions(self, example_question, example_answer, question_field, question_type, question_num=1, temperature=0.8):
+    def generate_questions(self, example_question, example_answer, content_type, question_type, question_num=1, temperature=None):
         """
         生成新题目
 
         参数:
         example_question (str): 示例题目
         example_answer (str): 示例答案
-        question_field (str): 题目领域
+        content_type (str): 题目领域
         question_type (str): 题目类型
         question_num (int): 要生成的题目数量
-        temperature (float): 生成多样性参数，0.0-1.0
+        temperature (float): 生成多样性参数，0.0-1.0，如果为None则随机生成
 
         返回:
         dict: 包含生成题目的JSON对象
         """
+        if temperature is None:
+            temperature = random.uniform(0.0, 1.0)
+
         if(example_question == "" and example_answer == ""):
             prompt = self._build_prompt_without_example(
                 question_num,
-                question_field,
+                content_type,
                 question_type
             )
         else:
@@ -260,7 +268,7 @@ class QuestionGenerator:
                 example_question,
                 example_answer,
                 question_num,
-                question_field,
+                content_type,
                 question_type
             )
 
@@ -277,6 +285,7 @@ class QuestionGenerator:
             )
 
             response = completion.choices[0].message.content
+            print("原始响应:", response)  # 添加调试输出
 
             json_str = response.strip()
             if "```json" in json_str:
@@ -289,13 +298,15 @@ class QuestionGenerator:
                 end_index = json_str.find("```", start_index)
                 if end_index != -1:
                     json_str = json_str[start_index:end_index].strip()
-
-            print(json_str)
+            
+            print("清理后的JSON字符串:", json_str)  # 添加调试输出
 
             try:
                 questions = json.loads(json_str)
                 return questions
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                print(f"JSON解析错误: {str(e)}")  # 添加错误输出
+                print(f"问题JSON字符串: {json_str}")  # 添加问题字符串输出
                 return {"error": "无法解析为JSON", "raw_response": response}
 
         except Exception as e:
@@ -303,8 +314,6 @@ class QuestionGenerator:
 
     def save_questions_to_json(self, questions, filename="generated_questions.json"):
         """
-        将生成的题目保存到JSON文件，以追加方式添加内容
-
         参数:
         questions (list/dict): 生成的题目，可以是列表或单个题目的字典
         filename (str): 输出JSON文件名
@@ -313,47 +322,64 @@ class QuestionGenerator:
         bool: 保存是否成功
         """
         try:
+            from collections import OrderedDict
+            
             if isinstance(questions, dict):
                 if "error" in questions:
                     print(f"错误: {questions['error']}")
                     return False
-                data_to_save = questions
+                data_to_save = [questions]
             else:
-                if len(questions) == 1:
-                    data_to_save = questions[0]
-                else:
-                    data_to_save = questions
+                data_to_save = questions if isinstance(questions, list) else [questions]
 
             try:
                 file_exists = os.path.isfile(filename) and os.path.getsize(filename) > 0
             except:
                 file_exists = False
 
+            def reorder_dict(d):
+                # 创建新的OrderedDict，确保question_id在最前面
+                ordered = OrderedDict()
+                ordered['question_id'] = d.get('question_id', 0)
+                # 添加其他字段
+                for key, value in d.items():
+                    if key != 'question_id':
+                        ordered[key] = value
+                return ordered
+
             if not file_exists:
+                for i, question in enumerate(data_to_save, 1):
+                    question['question_id'] = i
+                # 重新排序每个问题
+                data_to_save = [reorder_dict(q) for q in data_to_save]
                 with open(filename, 'w', encoding='utf-8') as f:
                     json.dump(data_to_save, f, ensure_ascii=False, indent=2)
             else:
                 try:
                     with open(filename, 'r', encoding='utf-8') as f:
                         existing_data = json.load(f)
-
-                    if isinstance(existing_data, list):
-                        if isinstance(data_to_save, list):
-                            combined_data = existing_data + data_to_save
-                        else:
-                            existing_data.append(data_to_save)
-                            combined_data = existing_data
-                    else:
-                        if isinstance(data_to_save, list):
-                            combined_data = [existing_data] + data_to_save
-                        else:
-                            combined_data = [existing_data, data_to_save]
-
+                    
+                    if not isinstance(existing_data, list):
+                        existing_data = [existing_data]
+                    
+                    max_id = max([q.get('question_id', 0) for q in existing_data])
+                    
+                    for i, question in enumerate(data_to_save, max_id + 1):
+                        question['question_id'] = i
+                    
+                    # 重新排序所有问题
+                    existing_data = [reorder_dict(q) for q in existing_data]
+                    data_to_save = [reorder_dict(q) for q in data_to_save]
+                    combined_data = existing_data + data_to_save
+                    
                     with open(filename, 'w', encoding='utf-8') as f:
                         json.dump(combined_data, f, ensure_ascii=False, indent=2)
 
                 except json.JSONDecodeError:
-                    # 文件存在但不是有效的JSON，覆盖它
+                    for i, question in enumerate(data_to_save, 1):
+                        question['question_id'] = i
+                    # 重新排序新问题
+                    data_to_save = [reorder_dict(q) for q in data_to_save]
                     with open(filename, 'w', encoding='utf-8') as f:
                         json.dump(data_to_save, f, ensure_ascii=False, indent=2)
 
@@ -365,15 +391,15 @@ class QuestionGenerator:
             return False
 
 
-    def _mulit_generate_questions(self, example_question, example_answer, question_field, question_type):
+    def _mulit_generate_questions(self, example_question, example_answer, content_type, question_type):
         for i in range(25):
             questions = self.generate_questions(
                 example_question,
                 example_answer,
-                question_field,
+                content_type,
                 question_type,
                 question_num=1,
-                temperature=0.8
+                temperature=None
             )
             if self.save_questions_to_json(questions):
                 print(f"第{i+1}次生成成功")
@@ -381,12 +407,12 @@ class QuestionGenerator:
                 print(f"第{i+1}次生成失败")
 
 
-    def generate_question_bank(self, example_question, example_answer,question_field):
-        self._mulit_generate_questions(example_question, example_answer, question_field, "单选题")
-        self._mulit_generate_questions(example_question, example_answer, question_field, "多选题")
-        self._mulit_generate_questions(example_question, example_answer, question_field, "判断题")
-        self._mulit_generate_questions(example_question, example_answer, question_field, "填空题")
-        self._mulit_generate_questions(example_question, example_answer, question_field, "简答题")
+    def generate_question_bank(self, example_question, example_answer,content_type):
+        self._mulit_generate_questions(example_question, example_answer, content_type, "单选题")
+        self._mulit_generate_questions(example_question, example_answer, content_type, "多选题")
+        self._mulit_generate_questions(example_question, example_answer, content_type, "判断题")
+        self._mulit_generate_questions(example_question, example_answer, content_type, "填空题")
+        self._mulit_generate_questions(example_question, example_answer, content_type, "简答题")
 
 if __name__ == "__main__":
     api_key = api
