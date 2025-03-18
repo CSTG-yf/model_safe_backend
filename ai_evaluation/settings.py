@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 import os
 from pathlib import Path
+from datetime import timedelta
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -156,3 +158,8 @@ CORS_ORIGIN_WHITELIST = (
     'http://localhost:3000',
     'http://localhost:63342',
 )
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),  # Access Token 有效期 1 小时
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),  # Refresh Token 有效期 7 天
+}
