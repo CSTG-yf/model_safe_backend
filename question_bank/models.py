@@ -28,7 +28,7 @@ class EvalQuestions(models.Model):
 # [
 #     {
 #         "question_id": 1  
-#         "source": "SecurityQuestions",
+#         "source": "security-bank",
 #         "content_type": "",
 #         "question_type": "",
 #         "question": "问题"

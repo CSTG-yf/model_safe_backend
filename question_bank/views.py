@@ -11,7 +11,7 @@ class EvaluationQuestionsViewSet(viewsets.ModelViewSet):
     queryset = EvalQuestions.objects.all()
     serializer_class = EvalQuestionsSerializer
 
-    @action(detail=False, methods=['post'], url_path='generated-questions')
+    @action(detail=False, methods=['post'], url_path='generate-questions')
     def generated_questions(self, request):
         return generated_questions_and_add_to_database(request)
 

@@ -7,24 +7,41 @@ from .models import EvalQuestions, SecurityQuestions
 
 from core.one_api_client import call_one_api  # AI 生成逻辑
 from .serializers import SecurityQuestionsSerializer
+from utils import QuestionGenerator
+
+api = "sk-hhAm1szWdX0riU29nSrmrHrtAFOUKcQuG4jE4mEFSQwqLuWS"
+url = "https://api.moonshot.cn/v1"
+myModel = "moonshot-v1-8k"
+generator = QuestionGenerator(api, url, myModel)
 
 
 def generated_questions_and_add_to_database(request):
     """
     AI 生成题目，但不存数据库，而是返回给前端
     """
-    system_prompt = "你是一名ai助手"
+    field = request.data.get("field")
     prompt = request.data.get("prompt")
     number = request.data.get("number")
+    security_ratios = request.data.get("security_ratios")
     if not prompt:
         return Response({"error": "请提供 prompt"}, status=status.HTTP_400_BAD_REQUEST)
 
     question_list = []
-    for i in range(int(number)):
-        # 调用 AI
-        ai_response = call_one_api(system_prompt,prompt)
-        questions_data = ai_response.get("questions", [])
-        question_list.append(i for i in questions_data)
+    # 生成用户输入题库
+    generated_question_list = generator._mulit_generate_questions(number,field,prompt)
+    question_list.extend(generated_question_list)
+
+    # 按比例随机选择安全问题
+    total_security_questions = 100
+    for ratio_info in security_ratios:
+        category_type = ratio_info.get("category_type")
+        ratio = ratio_info.get("ratio")
+        security_questions = SecurityQuestions.objects.filter(content_type==category_type)
+        count = int(total_security_questions * ratio / 100)
+        selected_questions = random.sample(list(security_questions), count)
+        for question in selected_questions:
+            question['source'] = 'security-bank'
+        question_list.extend(selected_questions)
 
     if not question_list:
         return Response({'status': 'error','message':'无有效题目'}, status=status.HTTP_400_BAD_REQUEST)

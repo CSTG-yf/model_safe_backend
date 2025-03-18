@@ -5,10 +5,6 @@ import openai
 import json
 import random
 
-api = "sk-hhAm1szWdX0riU29nSrmrHrtAFOUKcQuG4jE4mEFSQwqLuWS"
-url = "https://api.moonshot.cn/v1"
-myModel = "moonshot-v1-8k"
-
 class QuestionGenerator:
     def __init__(self, api_key, base_url, model):
         """
@@ -151,6 +147,7 @@ class QuestionGenerator:
             - 尽量覆盖该领域的主要知识点和典型应用场景
     
             ## 题目要求
+            - 若题目类中未要求具体的题目类型，比如“微积分”，则需要随机生成选择题或者计算题或者简答题或者案例分析题确保多样性，若明确提出具体的题目类型，比如“关于微积分的选择题”，则按要求生成选择题
             - 对于选择题：提供明确的选项和正确答案，以及每个选项的分析
             - 对于计算题：提供详细的计算步骤和公式应用过程
             - 对于简答题：提供完整的标准答案和关键点分析
@@ -239,7 +236,7 @@ class QuestionGenerator:
         请为指定领域设计高质量题目，确保题目难度困难，知识点覆盖全面，答案和评分标准清晰。
         """
 
-    def generate_questions(self, example_question, example_answer, content_type, question_type, question_num=1, temperature=None):
+    def generate_questions(self, content_type, question_type, question_num=1, temperature=None,example_question ="",example_answer=""):
         """
         生成新题目
 
@@ -257,7 +254,7 @@ class QuestionGenerator:
         if temperature is None:
             temperature = random.uniform(0.0, 1.0)
 
-        if(example_question == "" and example_answer == ""):
+        if example_question == "" and example_answer == "":
             prompt = self._build_prompt_without_example(
                 question_num,
                 content_type,
@@ -312,113 +309,20 @@ class QuestionGenerator:
         except Exception as e:
             return {"error": str(e)}
 
-    def save_questions_to_json(self, questions, filename="generated_questions.json"):
-        """
-        参数:
-        questions (list/dict): 生成的题目，可以是列表或单个题目的字典
-        filename (str): 输出JSON文件名
-
-        返回:
-        bool: 保存是否成功
-        """
-        try:
-            from collections import OrderedDict
-            
-            if isinstance(questions, dict):
-                if "error" in questions:
-                    print(f"错误: {questions['error']}")
-                    return False
-                data_to_save = [questions]
-            else:
-                data_to_save = questions if isinstance(questions, list) else [questions]
-
-            try:
-                file_exists = os.path.isfile(filename) and os.path.getsize(filename) > 0
-            except:
-                file_exists = False
-
-            def reorder_dict(d):
-                # 创建新的OrderedDict，确保question_id在最前面
-                ordered = OrderedDict()
-                ordered['question_id'] = d.get('question_id', 0)
-                # 添加其他字段
-                for key, value in d.items():
-                    if key != 'question_id':
-                        ordered[key] = value
-                return ordered
-
-            if not file_exists:
-                for i, question in enumerate(data_to_save, 1):
-                    question['question_id'] = i
-                # 重新排序每个问题
-                data_to_save = [reorder_dict(q) for q in data_to_save]
-                with open(filename, 'w', encoding='utf-8') as f:
-                    json.dump(data_to_save, f, ensure_ascii=False, indent=2)
-            else:
-                try:
-                    with open(filename, 'r', encoding='utf-8') as f:
-                        existing_data = json.load(f)
-                    
-                    if not isinstance(existing_data, list):
-                        existing_data = [existing_data]
-                    
-                    max_id = max([q.get('question_id', 0) for q in existing_data])
-                    
-                    for i, question in enumerate(data_to_save, max_id + 1):
-                        question['question_id'] = i
-                    
-                    # 重新排序所有问题
-                    existing_data = [reorder_dict(q) for q in existing_data]
-                    data_to_save = [reorder_dict(q) for q in data_to_save]
-                    combined_data = existing_data + data_to_save
-                    
-                    with open(filename, 'w', encoding='utf-8') as f:
-                        json.dump(combined_data, f, ensure_ascii=False, indent=2)
-
-                except json.JSONDecodeError:
-                    for i, question in enumerate(data_to_save, 1):
-                        question['question_id'] = i
-                    # 重新排序新问题
-                    data_to_save = [reorder_dict(q) for q in data_to_save]
-                    with open(filename, 'w', encoding='utf-8') as f:
-                        json.dump(data_to_save, f, ensure_ascii=False, indent=2)
-
-            print(f"题目已成功保存到 {filename}")
-            return True
-
-        except Exception as e:
-            print(f"保存JSON时出错: {str(e)}")
-            return False
-
-
-    def _mulit_generate_questions(self, example_question, example_answer, content_type, question_type):
-        for i in range(25):
+    def _mulit_generate_questions(self,question_num,content_type, question_type):
+        question_list = []
+        for i in range(question_num):
             questions = self.generate_questions(
-                example_question,
-                example_answer,
                 content_type,
                 question_type,
                 question_num=1,
-                temperature=None
+                temperature=None,
             )
-            if self.save_questions_to_json(questions):
-                print(f"第{i+1}次生成成功")
-            else:
-                print(f"第{i+1}次生成失败")
+            question_list.append(questions)
+            print(f"第{i + 1}次生成成功")
+        return question_list
 
 
-    def generate_question_bank(self, example_question, example_answer,content_type):
-        self._mulit_generate_questions(example_question, example_answer, content_type, "单选题")
-        self._mulit_generate_questions(example_question, example_answer, content_type, "多选题")
-        self._mulit_generate_questions(example_question, example_answer, content_type, "判断题")
-        self._mulit_generate_questions(example_question, example_answer, content_type, "填空题")
-        self._mulit_generate_questions(example_question, example_answer, content_type, "简答题")
 
-if __name__ == "__main__":
-    api_key = api
-    base_url = url
-    model_name = myModel
-    generator = QuestionGenerator(api_key, base_url, model_name)
-    generator.generate_question_bank("", "", "数学")
 
 
