@@ -15,7 +15,7 @@ myModel = "moonshot-v1-8k"
 generator = QuestionGenerator(api, url, myModel)
 
 
-def generated_questions_and_add_to_database(request):
+def generated_questions_and_add_to_database(request,project_id):
     """
     AI 生成题目，但不存数据库，而是返回给前端
     """
@@ -36,7 +36,7 @@ def generated_questions_and_add_to_database(request):
     for ratio_info in security_ratios:
         category_type = ratio_info.get("category_type")
         ratio = ratio_info.get("ratio")
-        security_questions = SecurityQuestions.objects.filter(content_type==category_type)
+        security_questions = SecurityQuestions.objects.filter(content_type=category_type,)
         count = int(total_security_questions * ratio / 100)
         selected_questions = random.sample(list(security_questions), count)
         for question in selected_questions:
@@ -48,7 +48,7 @@ def generated_questions_and_add_to_database(request):
 
     eval_question = EvalQuestions.objects.create(
         exam_title=question_list[0],
-        project_id=request.data.get("project_id"),
+        project_id=project_id,
         created_at=timezone.now(),
         questions=json.dumps(question_list),
     )
