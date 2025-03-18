@@ -6,6 +6,7 @@ from .serializers import EvalQuestionsSerializer, SecurityQuestionsSerializer,Ba
 from members.models import ProjectMember
 import random
 from django.utils.timezone import now
+from .services import generated_questions_and_add_to_database
 
 
 def check_project_membership(user, project_id):
@@ -138,66 +139,9 @@ class SingleQuestionBankView(views.APIView):
 
 
 class GenerateObservationQuestionBankView(views.APIView):
-    """ 生成观测题库（模拟数据） """
+    """ 生成观测题库（调用 AI + 安全题库）"""
     permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request, project_id):
-        """ 在数据库中创建一个模拟的观测题库 """
-        exam_title = request.data.get("exam_title", f"观测题库_{random.randint(1000, 9999)}")
-        description = request.data.get("description", "自动生成的模拟观测题库")
-
-        # 获取随机安全题库题目
-        security_questions = list(SecurityQuestions.objects.all())
-        num_security_questions = min(len(security_questions), 3)  # 随机选取最多 3 道安全题
-        selected_security_questions = random.sample(security_questions, num_security_questions) if security_questions else []
-
-        # 构造 JSON 格式的 `questions`
-        questions = [
-            {
-                "question_id": q.id,
-                "source": "SecurityQuestions",
-                "content_type": q.content_type,
-                "question_type": q.question_type,
-                "question": q.question,
-                "options": q.options,
-                "answer": q.answer,
-                "scoring_criteria": q.scoring_criteria
-            }
-            for q in selected_security_questions
-        ]
-
-        # 额外生成 2 道 AI 题目（模拟）
-        ai_generated_questions = [
-            {
-                "question_id": random.randint(10000, 99999),
-                "source": "AI",
-                "content_type": "text",
-                "question_type": "选择题",
-                "question": f"这是 AI 生成的问题 {i+1}?",
-                "options": ["选项 A", "选项 B", "选项 C"],
-                "answer": "选项 A",
-                "scoring_criteria": "回答 A 正确，其他错误"
-            }
-            for i in range(2)
-        ]
-
-        # 合并安全题目和 AI 生成的题目
-        questions.extend(ai_generated_questions)
-
-        # 创建数据库记录
-        question_bank = EvalQuestions.objects.create(
-            exam_title=exam_title,
-            description=description,
-            project_id_id=project_id,  # 直接传 `project_id`
-            created_at=now(),
-            questions=questions
-        )
-
-        serializer = EvalQuestionsSerializer(question_bank)
-
-        return Response({
-            "result": "success",
-            "message": "观测题库生成成功",
-            "question_bank": serializer.data
-        }, status=status.HTTP_201_CREATED)
-
+    def post(self, request):
+        """ 直接调用 `services.py` 生成题库 """
+        return generated_questions_and_add_to_database(request)

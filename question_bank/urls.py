@@ -17,6 +17,6 @@ urlpatterns = [
     # 获取单个观测题库的具体内容
     path('<int:question_bank_id>/detail/', SingleQuestionBankView.as_view(), name='single_question_bank'),
 
-    # 预留：生成观测题库
+    # 生成观测题库
     path('<int:project_id>/generate/', GenerateObservationQuestionBankView.as_view(), name='generate_observation_bank'),
 ]

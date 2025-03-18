@@ -5,8 +5,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from .models import EvalQuestions, SecurityQuestions
 
-from core.one_api_client import call_one_api  # AI 生成逻辑
-from .serializers import SecurityQuestionsSerializer
 from utils import QuestionGenerator
 
 api = "sk-hhAm1szWdX0riU29nSrmrHrtAFOUKcQuG4jE4mEFSQwqLuWS"
@@ -36,7 +34,7 @@ def generated_questions_and_add_to_database(request):
     for ratio_info in security_ratios:
         category_type = ratio_info.get("category_type")
         ratio = ratio_info.get("ratio")
-        security_questions = SecurityQuestions.objects.filter(content_type==category_type)
+        security_questions = SecurityQuestions.objects.filter(content_type=category_type)
         count = int(total_security_questions * ratio / 100)
         selected_questions = random.sample(list(security_questions), count)
         for question in selected_questions:
