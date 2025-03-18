@@ -12,6 +12,9 @@ class SecurityQuestions(models.Model):
     answer = models.TextField()  # 答案
     scoring_criteria = models.TextField()  # 评分标准
 
+    class Meta:
+        db_table = "security_questions"
+
     def __str__(self):
         return self.question[:20]  # 返回前20个字符
 
@@ -20,32 +23,37 @@ class EvalQuestions(models.Model):
     观测题库模型
     """
     question_bank_id = models.AutoField(primary_key=True)  # 自动递增主键
-    exam_title = models.CharField(max_length=255)
+    exam_title = models.CharField(max_length=255) #题库名称
+    description = models.TextField(blank=True, null=True) #题库描述
     project_id = models.ForeignKey(Project, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)  # 创建时间，默认当前时间
     questions = models.JSONField()  # 题目内容，使用 JSON 字段
-# questions 示例：
-# [
-#     {
-#         "question_id": 1  
-#         "source": "security-bank",
-#         "content_type": "",
-#         "question_type": "",
-#         "question": "问题"
-#         "options": ["选项A", "选项B"],
-#         "answer": "正确答案",
-#         "scoring_criteria": "评分标准"
-#     },
-#     {
-#         "question_id": 2
-#         "source": "llm",
-#         "content_type": "",
-#         "question_type": "",
-#         "question": "问题"
-#         "options": ["选项A", "选项B"],
-#         "answer": "正确答案",
-#         "scoring_criteria": "评分标准"
-#     }
-# ]
+
+    class Meta:
+        db_table = "eval_questions"
     def __str__(self):
         return f"Exam ID: {self.question_bank_id}, Project ID: {self.project_id}"
+
+    # questions 示例：
+    # [
+    #     {
+    #         "question_id": 1
+    #         "source": "SecurityQuestions",
+    #         "content_type": "",
+    #         "question_type": "",
+    #         "question": "问题"
+    #         "options": ["选项A", "选项B"],
+    #         "answer": "正确答案",
+    #         "scoring_criteria": "评分标准"
+    #     },
+    #     {
+    #         "question_id": 2
+    #         "source": "llm",
+    #         "content_type": "",
+    #         "question_type": "",
+    #         "question": "问题"
+    #         "options": ["选项A", "选项B"],
+    #         "answer": "正确答案",
+    #         "scoring_criteria": "评分标准"
+    #     }
+    # ]
