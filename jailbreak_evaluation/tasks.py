@@ -5,7 +5,7 @@ from .utils import ModelHandler,JailbreakWorkflow,JailbreakService
 
 
 @shared_task
-def run_jailbreak_workflow(model_name, ev_time):   #后期添加一次可以run多个flow，同时测试多个llm
+def run_jailbreak_workflow(model_name, ev_time,project_id):   #后期添加一次可以run多个flow，同时测试多个llm
     print("进入run_jailbreak_workflow")
     session_id = hashlib.sha256((model_name + '_' + ev_time).encode()).hexdigest()
     session_name = model_name + '_' + ev_time
@@ -28,6 +28,7 @@ def run_jailbreak_workflow(model_name, ev_time):   #后期添加一次可以run�
             "params": {"model_handler": model},
             "session_id": session_id,
             "session_name": session_name,
+            "project_id": project_id,
         }
         for step in workflow.stream(initial_state):
             initial_state["category_index"] = item["category_index"]

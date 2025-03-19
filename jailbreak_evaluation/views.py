@@ -8,13 +8,13 @@ from rest_framework.decorators import action
 from rest_framework import status
 
 class StartWorkflowAPI(APIView):
-    def post(self,request):
+    def post(self,request,project_id):
         """启动工作流"""
         data = request.data
         model_name = data['model_name']
         ev_time = data['ev_time']
         try:
-            run_jailbreak_workflow.delay(model_name, ev_time)
+            run_jailbreak_workflow.delay(model_name, ev_time,project_id)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
@@ -28,35 +28,27 @@ class ScoreHistoryViewSet(viewsets.ModelViewSet):
     包含标准 CRUD 和自定义查询操作
     """
     serializer_class = ScoreRecordSerializer
-
-    def get_queryset(self):
-        """复用 question_bank 的分页和过滤逻辑"""
-        return JailbreakService.get_all_score_records()
-
-    @action(detail=False, methods=['get'], url_path='get-all-score-history')
-    def get_all_score_history(self, request):
+    @action(detail=False, methods=['get'], url_path='?P<project_id>[^/.]+)/get-sessions')
+    def get_all_score_history(self, request,project_id=None):
         """获取全部记录"""
         try:
-            records = JailbreakService.get_all_score_records().values(
-            'category_index', 'title_index', 'content_index', 'avg_score', 'history'
-        )
+            records = JailbreakService.get_all_session_by_project_id(project_id)
             return Response({'results': records}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @action(detail=False, methods=['post'], url_path='query-by-session-id')
-    def query_by_session_id(self, request):
+    @action(detail=False, methods=['post'], url_path='?P<project_id>[^/.]+)/query-by-session-id')
+    def query_by_session_id(self, request,project_id=None):
         """自定义参数查询"""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
         try:
-            records = JailbreakService.get_score_history(
-                session_id=serializer.validated_data['session_id']
+            records = JailbreakService.get_score_history_by_session_id(
+                session_id=serializer.validated_data['session_id'],
+                project_id=project_id
             )
-            # 反序列化记录
-            serialized_records = ScoreRecordSerializer(records, many=True).data
-            return Response({'result': serialized_records}, status=200)
+            return Response({'result': records}, status=200)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 

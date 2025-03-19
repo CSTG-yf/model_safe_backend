@@ -15,8 +15,9 @@ class JailbreakQuestion(models.Model):
 
 
 class ScoreRecord(models.Model):
-    session_id = models.TextField(primary_key=True)
-    ev_id = models.TextField()
+    session_id = models.TextField(primary_key=True)  # 会话ID(由模型名称+时间戳组成)
+    ev_id = models.TextField()  # 评估结果ID
+    project_id = models.IntegerField()
     session_name = models.TextField()
     category_index = models.IntegerField()
     title_index = models.IntegerField()
@@ -26,7 +27,7 @@ class ScoreRecord(models.Model):
 
     class Meta:
         db_table = 'new_content_avg_score'
-        unique_together = ('session_id', 'ev_id')
+        unique_together = ('session_id', 'ev_id','project_id')
 
 
 # class IterationRecord(models.Model):

@@ -25,6 +25,7 @@ class JailbreakService:
             ScoreRecord.objects.update_or_create(
                 session_id= data['session_id'],
                 ev_id=data['ev_id'],
+                project_id=data['project_id'],
                 session_name=data['session_name'],
                 category_index=data["category_index"],
                 title_index=data["title_index"],
@@ -37,21 +38,24 @@ class JailbreakService:
             return None
 
     @staticmethod
-    def get_all_score_records():
+    def get_all_session_by_project_id(project_id):
         try:
-            record = ScoreRecord.objects.all()
-            return record
+            record = ScoreRecord.objects.filter(
+                project_id=project_id
+            ).values('session_id', 'session_name').distinct()
+            return list[record]
         except ObjectDoesNotExist:
             return []
 
     @staticmethod
-    def get_score_history(session_id):
+    def get_score_history_by_session_id(session_id,project_id):
         """获取评分历史"""
         try:
-            record = ScoreRecord.objects.get(
-                session_id=session_id
-            )
-            return record.history
+            record = ScoreRecord.objects.filter(
+                session_id=session_id,
+                project_id=project_id
+            ).values('ev_id', 'history')
+            return list[record]
         except ObjectDoesNotExist:
             return []
 
@@ -384,6 +388,7 @@ class GraphState(TypedDict):    #状态管理类，每次迭代都要使用到�
     params: Dict
     session_id: str
     session_name: str
+    project_id: int
 
 
 def extract_prompt(response):  # 获取攻击模型的new_prompt
@@ -468,15 +473,6 @@ def update_history(state: GraphState) -> GraphState:
     ProgressConsumer.send_message(message)
     # ProgressConsumer.send_message(message, task_id)
 
-    #保存到数据库
-    # JailbreakService.save_iteration({
-    #     "category_index": state["category_index"],
-    #     "title_index": state["title_index"],
-    #     "prompt_num": state["prompt_num"],
-    #     "current_cycle": state["cycle_count"] + 1,
-    #     "latest_entry": new_entry,
-    # })
-
     return {"history": new_history,
             "cycle_count": state["cycle_count"] + 1,
             }
@@ -518,7 +514,8 @@ def compute_score(state: GraphState):
             "title_index":state["title_index"],
             "prompt_num": state["prompt_num"],
             "average_score": avg_score,
-            "history": state["history"]
+            "history": state["history"],
+            "project_id": state["project_id"],
         })
 
 #创建工作流
