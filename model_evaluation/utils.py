@@ -1,4 +1,5 @@
 import logging
+from datetime import timezone
 
 import pandas as pd
 import openai
@@ -7,8 +8,8 @@ import pymysql
 import os
 import django
 
-from ai_evaluation import settings
 from model_evaluation.consumers import ProgressConsumer
+from .models import  ModelEvaluationHALUCINATION_TOXICITY
 
 from phoenix.evals import (
     TOXICITY_PROMPT_RAILS_MAP,
@@ -20,24 +21,11 @@ from phoenix.evals import (
     download_benchmark_dataset,
 )
 
+from model_evaluation.models import EvaluationBatch, EvaluationRecord
+
 api = "sk-hhAm1szWdX0riU29nSrmrHrtAFOUKcQuG4jE4mEFSQwqLuWS"
 url = "https://api.moonshot.cn/v1"
 myModel = "moonshot-v1-8k"
-
-def fetch_questions_by_id(id, table_name):
-    conn = pymysql.connect(
-        host="localhost",
-        user="root",
-        password="123456",
-        database="ai"
-    )
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM {table_name} WHERE id = %s", (id,))
-    record = cursor.fetchone()
-
-    cursor.close()
-    conn.close()
-    return record
 
 def hullucination_evaluation(api_key, base_url, model_name, N_EVAL_SAMPLE_SIZE=100):
     df = download_benchmark_dataset(
@@ -69,6 +57,15 @@ def hullucination_evaluation(api_key, base_url, model_name, N_EVAL_SAMPLE_SIZE=1
     true_labels = df["is_hallucination"].map(HALLUCINATION_PROMPT_RAILS_MAP).tolist()
 
     hallucination_accuracy = accuracy_score(true_labels, hallucination_classifications)
+
+    evaluation_result, created =  ModelEvaluationHALUCINATION_TOXICITY.objects.get_or_create(
+        model_name=model_name,
+        defaults={'hallucination_accuracy': None, 'toxicity_accuracy': None}
+    )
+
+    evaluation_result.hallucination_accuracy = hallucination_accuracy
+    evaluation_result.save(update_fields=['hallucination_accuracy'])
+
     return hallucination_accuracy
 
 def toxicity_evaluation(api_key, base_url, model_name,N_EVAL_SAMPLE_SIZE=100):
@@ -107,9 +104,43 @@ def toxicity_evaluation(api_key, base_url, model_name,N_EVAL_SAMPLE_SIZE=100):
     true_labels = df["toxic"].map(TOXICITY_PROMPT_RAILS_MAP).tolist()
 
     toxicity_accuracy = accuracy_score(true_labels, toxic_classifications)
+
+    evaluation_result, created = ModelEvaluationHALUCINATION_TOXICITY.objects.get_or_create(
+        model_name=model_name,
+        defaults={'hallucination_accuracy': None, 'toxicity_accuracy': None}
+    )
+
+    evaluation_result.toxicity_accuracy = toxicity_accuracy
+    evaluation_result.save(update_fields=['toxicity_accuracy'])
+
     return toxicity_accuracy
 
-class SecureEvaluator:
+
+def run_full_evaluation(api_key, base_url, model_name, sample_size=100):
+    hallucination_accuracy = hullucination_evaluation(
+        api_key, base_url, model_name, N_EVAL_SAMPLE_SIZE=sample_size
+    )
+
+    toxicity_accuracy = toxicity_evaluation(
+        api_key, base_url, model_name, N_EVAL_SAMPLE_SIZE=sample_size
+    )
+
+    result, created = ModelEvaluationHALUCINATION_TOXICITY.objects.get_or_create(
+        model_name=model_name,
+        defaults={
+            'hallucination_accuracy': hallucination_accuracy,
+            'toxicity_accuracy': toxicity_accuracy
+        }
+    )
+
+    if not created:
+        result.hallucination_accuracy = hallucination_accuracy
+        result.toxicity_accuracy = toxicity_accuracy
+        result.save()
+
+    return result
+
+class Evaluator:
     def __init__(self, api_key, base_url, model_name, eval_api_key, eval_base_url, eval_model_name, task_id='default', logger_name=__name__):
         self.api_key = api_key
         self.base_url = base_url
@@ -120,6 +151,10 @@ class SecureEvaluator:
         self.results = []
         self.task_id = task_id
         self.logger = logging.getLogger(logger_name)
+        self.batch = EvaluationBatch.objects.create(
+            name=f"Evaluation {self.task_id}",
+            created_at=timezone.now()
+        )
 
     def _get_response(self, api_key, base_url, system_prompt, user_prompt, temperature=0.3):
         try:
@@ -150,17 +185,43 @@ class SecureEvaluator:
             self.task_id
         )
 
-    def evaluate(self, record_id, table_name):
+    def _save_to_db(self, record_id, prompt, response, score, tokens):
         try:
-            question_record = fetch_questions_by_id(record_id, table_name)
-            if not question_record:
+            # 创建评估记录
+            EvaluationRecord.objects.create(
+                batch=self.batch,
+                record_id=record_id,
+                input=prompt,
+                output=response,
+                score=float(score) if score else 0.0,
+                tokens=int(tokens) if tokens else 0
+            )
+
+            # 更新批次信息
+            self.batch.total_records = EvaluationRecord.objects.filter(batch=self.batch).count()
+            records = EvaluationRecord.objects.filter(batch=self.batch)
+            self.batch.average_score = sum(
+                r.score for r in records) / self.batch.total_records if self.batch.total_records > 0 else 0.0
+            self.batch.total_tokens = sum(r.tokens for r in records)
+            self.batch.save()
+
+            self.logger.info(f"Saved record {record_id} to database")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error saving to database: {str(e)}")
+            return False
+
+    def evaluate(self, inQuestion):
+        try:
+            record_id = inQuestion[0]
+            if not inQuestion:
                 self.logger.warning(f"Record not found: ID={record_id}")
                 return None
 
-            question = question_record[3]
-            options = question_record[4]
-            answer = question_record[5]
-            criteria = question_record[6]
+            question = inQuestion[4]
+            options = inQuestion[5]
+            answer = inQuestion[6]
+            criteria = inQuestion[7]
 
             prompt = f"问题是{question}，选项是{options}。请你回答一个正确的选项，并说明原因。"
 
@@ -207,6 +268,8 @@ class SecureEvaluator:
                 "tokens": total_tokens
             })
 
+            self._save_to_db(record_id, prompt, response, eval_response, total_tokens)
+
             return record_id, prompt, response, eval_response, total_tokens
 
         except Exception as e:
@@ -217,16 +280,16 @@ class SecureEvaluator:
             self.logger.exception(f"Unexpected error in evaluate: {str(e)}")
             return None
 
-    def evaluate_multiple(self, record_ids, table_name="security_questions"):
-        total = len(record_ids)
-        for idx, record_id in enumerate(record_ids, 1):
+    def evaluate_multiple(self, questions):
+        total = len(questions)
+        for idx, question in enumerate(questions):
             self._send_progress('progress', {
-                "current": idx,
+                "current": idx + 1,
                 "total": total,
-                "percent": round((idx / total) * 100, 1)
+                "percent": round(((idx + 1) / total) * 100, 1)
             })
 
-            self.evaluate(record_id, table_name)
+            self.evaluate(question)
 
         if not self.results:
             self.logger.warning("No valid results collected")
@@ -256,7 +319,7 @@ if __name__ == "__main__":
     # 配置日志
     logging.basicConfig(level=logging.INFO)
 
-    evaluator = SecureEvaluator(
+    evaluator = Evaluator(
         api_key=api,
         base_url=url,
         model_name=myModel,
