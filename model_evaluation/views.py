@@ -10,9 +10,133 @@ from question_bank.models import EvalQuestions
 from .service import EvaluatorService
 from django.conf import settings
 from .utils import run_full_evaluation
-from .models import EvaluationBatch, EvaluationRecord, ModelEvaluationHALUCINATION_TOXICITY
+from .models import EvaluationBatch, EvaluationRecord, ModelEvaluationHALUCINATION_TOXICITY, ModelAPI
+from .serializers import ModelAPISerializer
 
 logger = logging.getLogger(__name__)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ModelAPIView(View):
+    """
+    处理模型API配置的视图
+    """
+    def get(self, request, *args, **kwargs):
+        """获取API配置列表或特定配置"""
+        model_name = kwargs.get('model_name')
+        
+        if model_name:
+            try:
+                model_api = ModelAPI.objects.get(name=model_name)
+                serializer = ModelAPISerializer(model_api)
+                return JsonResponse(serializer.data)
+            except ModelAPI.DoesNotExist:
+                return JsonResponse({
+                    'error': f'模型 {model_name} 的API配置不存在'
+                }, status=404)
+        
+        # 获取所有配置列表
+        model_apis = ModelAPI.objects.all()
+        serializer = ModelAPISerializer(model_apis, many=True)
+        return JsonResponse({
+            'models': serializer.data
+        })
+
+    def post(self, request, *args, **kwargs):
+        """添加新的API配置"""
+        try:
+            data = json.loads(request.body)
+            serializer = ModelAPISerializer(data=data)
+            
+            if serializer.is_valid():
+                # 检查是否已存在相同名称的配置
+                if ModelAPI.objects.filter(name=data['name']).exists():
+                    return JsonResponse({
+                        'error': f'模型 {data["name"]} 的API配置已存在'
+                    }, status=400)
+                
+                serializer.save()
+                return JsonResponse({
+                    'message': '成功添加API配置',
+                    'data': serializer.data
+                }, status=201)
+            
+            return JsonResponse({
+                'error': serializer.errors
+            }, status=400)
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': '无效的JSON格式'
+            }, status=400)
+        except Exception as e:
+            logger.exception(f"添加API配置时出错: {str(e)}")
+            return JsonResponse({
+                'error': f'服务器错误: {str(e)}'
+            }, status=500)
+
+    def put(self, request, *args, **kwargs):
+        """更新API配置"""
+        model_name = kwargs.get('model_name')
+        if not model_name:
+            return JsonResponse({
+                'error': '必须指定模型名称'
+            }, status=400)
+
+        try:
+            model_api = ModelAPI.objects.get(name=model_name)
+            data = json.loads(request.body)
+            serializer = ModelAPISerializer(model_api, data=data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return JsonResponse({
+                    'message': '成功更新API配置',
+                    'data': serializer.data
+                })
+            
+            return JsonResponse({
+                'error': serializer.errors
+            }, status=400)
+            
+        except ModelAPI.DoesNotExist:
+            return JsonResponse({
+                'error': f'模型 {model_name} 的API配置不存在'
+            }, status=404)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': '无效的JSON格式'
+            }, status=400)
+        except Exception as e:
+            logger.exception(f"更新API配置时出错: {str(e)}")
+            return JsonResponse({
+                'error': f'服务器错误: {str(e)}'
+            }, status=500)
+
+    def delete(self, request, *args, **kwargs):
+        """删除API配置"""
+        model_name = kwargs.get('model_name')
+        if not model_name:
+            return JsonResponse({
+                'error': '必须指定模型名称'
+            }, status=400)
+
+        try:
+            model_api = ModelAPI.objects.get(name=model_name)
+            model_api.delete()
+            return JsonResponse({
+                'message': f'成功删除模型 {model_name} 的API配置'
+            })
+        except ModelAPI.DoesNotExist:
+            return JsonResponse({
+                'error': f'模型 {model_name} 的API配置不存在'
+            }, status=404)
+        except Exception as e:
+            logger.exception(f"删除API配置时出错: {str(e)}")
+            return JsonResponse({
+                'error': f'服务器错误: {str(e)}'
+            }, status=500)
+
 
 def get_evaluation_halucination_toxicity(request, model_name):
     """
@@ -51,14 +175,25 @@ def trigger_evaluation_halucination_toxicity(request, model_name):
         }, status=405)
 
     try:
+        # 从数据库获取模型配置
+        try:
+            model_api = ModelAPI.objects.get(name=model_name)
+        except ModelAPI.DoesNotExist:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'模型 {model_name} 的API配置不存在'
+            }, status=404)
 
-        api_key = settings.MODEL_API_KEY,
-        base_url = settings.MODEL_BASE_URL,
-        model_name = settings.MODEL_NAME,
-        sample_size = 100
+        # 从请求中获取sample_size，默认为100
+        data = json.loads(request.body) if request.body else {}
+        sample_size = data.get('sample_size', 100)
 
-
-        result = run_full_evaluation(api_key, base_url, model_name, sample_size)
+        result = run_full_evaluation(
+            api_key=model_api.api_key,
+            base_url=model_api.base_url,
+            model_name=model_api.name,
+            sample_size=sample_size
+        )
 
         # 返回结果
         return JsonResponse({
@@ -71,7 +206,13 @@ def trigger_evaluation_halucination_toxicity(request, model_name):
             else None
         })
 
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': '无效的JSON格式'
+        }, status=400)
     except Exception as e:
+        logger.exception(f"评估模型时出错: {str(e)}")
         return JsonResponse({
             'status': 'error',
             'message': str(e)
@@ -82,22 +223,59 @@ def trigger_evaluation_halucination_toxicity(request, model_name):
 class EvaluationTaskView(View):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # 从设置中获取API配置
-        self.evaluator_service = EvaluatorService(
-            api_key=settings.MODEL_API_KEY,
-            base_url=settings.MODEL_BASE_URL,
-            model_name=settings.MODEL_NAME,
-            eval_api_key=settings.EVAL_MODEL_API_KEY,
-            eval_base_url=settings.EVAL_MODEL_BASE_URL,
-            eval_model_name=settings.EVAL_MODEL_NAME
-        )
+        # 从数据库中获取API配置
+        try:
+            model_api = ModelAPI.objects.get(name=settings.DEFAULT_MODEL_NAME)
+            eval_model_api = ModelAPI.objects.get(name=settings.DEFAULT_EVAL_MODEL_NAME)
+            
+            self.evaluator_service = EvaluatorService(
+                api_key=model_api.api_key,
+                base_url=model_api.base_url,
+                model_name=model_api.name,
+                eval_api_key=eval_model_api.api_key,
+                eval_base_url=eval_model_api.base_url,
+                eval_model_name=eval_model_api.name
+            )
+        except ModelAPI.DoesNotExist as e:
+            logger.error(f"无法找到所需的模型API配置: {str(e)}")
+            self.evaluator_service = None
+        except Exception as e:
+            logger.error(f"初始化评估服务时出错: {str(e)}")
+            self.evaluator_service = None
 
     def post(self, request, *args, **kwargs):
         """创建新的评估任务"""
+        if not self.evaluator_service:
+            return JsonResponse({
+                'error': '评估服务未正确初始化，请确保已配置相应的模型API'
+            }, status=500)
+
         try:
             data = json.loads(request.body)
             exam_title = data.get('exam_title')
-            batch_name = data.get('batch_name', f"Evaluation of {exam_title}")  # 获取批次名称
+            batch_name = data.get('batch_name', f"Evaluation of {exam_title}")
+            # 允许在请求中指定使用的模型
+            model_name = data.get('model_name', settings.DEFAULT_MODEL_NAME)
+            eval_model_name = data.get('eval_model_name', settings.DEFAULT_EVAL_MODEL_NAME)
+
+            # 如果请求中指定了不同的模型，重新初始化服务
+            if (model_name != self.evaluator_service.model_name or 
+                eval_model_name != self.evaluator_service.eval_model_name):
+                try:
+                    model_api = ModelAPI.objects.get(name=model_name)
+                    eval_model_api = ModelAPI.objects.get(name=eval_model_name)
+                    self.evaluator_service = EvaluatorService(
+                        api_key=model_api.api_key,
+                        base_url=model_api.base_url,
+                        model_name=model_api.name,
+                        eval_api_key=eval_model_api.api_key,
+                        eval_base_url=eval_model_api.base_url,
+                        eval_model_name=eval_model_api.name
+                    )
+                except ModelAPI.DoesNotExist:
+                    return JsonResponse({
+                        'error': f'找不到指定的模型配置: {model_name} 或 {eval_model_name}'
+                    }, status=400)
 
             if not exam_title:
                 return JsonResponse({'error': '必须提供exam_title'}, status=400)
@@ -119,7 +297,7 @@ class EvaluationTaskView(View):
             success = self.evaluator_service.start_evaluation_task(
                 task_id,
                 questions_data,
-                batch_id=batch.id  # 传递批次ID
+                batch_id=batch.id
             )
 
             if success:
@@ -127,10 +305,13 @@ class EvaluationTaskView(View):
                     'task_id': task_id,
                     'batch_id': batch.id,
                     'status': 'started',
-                    'message': '评估任务已启动'
+                    'message': '评估任务已启动',
+                    'model_info': {
+                        'model_name': self.evaluator_service.model_name,
+                        'eval_model_name': self.evaluator_service.eval_model_name
+                    }
                 })
             else:
-                # 如果启动失败，删除刚创建的批次
                 batch.delete()
                 return JsonResponse({'error': '无法启动评估任务'}, status=500)
 

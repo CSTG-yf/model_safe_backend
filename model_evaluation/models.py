@@ -1,6 +1,24 @@
 from django.db import models
 from django.utils import timezone
 
+
+class ModelAPI(models.Model):
+    """
+    存储模型API的相关信息
+    """
+    name = models.CharField(max_length=100, unique=True, help_text="模型名称")
+    api_key = models.CharField(max_length=255, help_text="API密钥")
+    base_url = models.URLField(help_text="API基础URL")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} API Configuration"
+
+    class Meta:
+        verbose_name = "Model API Configuration"
+        verbose_name_plural = "Model API Configurations"
+
+
 class ModelEvaluationHALUCINATION_TOXICITY(models.Model):
     model_name = models.CharField(max_length=100, help_text="Name of the evaluated model")
     hallucination_accuracy = models.FloatField(null=True, blank=True,
