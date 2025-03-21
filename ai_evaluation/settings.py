@@ -163,3 +163,7 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),  # Access Token 有效期 1 小时
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),  # Refresh Token 有效期 7 天
 }
+
+# 默认模型配置
+DEFAULT_MODEL_NAME = "moonshot-v1-8k"  # 默认评估模型
+DEFAULT_EVAL_MODEL_NAME = "deepseek-v3"  # 默认评分模型
