@@ -4,8 +4,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from .models import EvalQuestions, SecurityQuestions
+from .utils import QuestionGenerator
 
-from utils import QuestionGenerator
 
 api = "sk-hhAm1szWdX0riU29nSrmrHrtAFOUKcQuG4jE4mEFSQwqLuWS"
 url = "https://api.moonshot.cn/v1"

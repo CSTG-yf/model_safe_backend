@@ -13,6 +13,11 @@ async function startWorkflow() {
             headers: {
                 'Content-Type': 'application/json'
             },
+            body: JSON.stringify({
+                "project_id": 1 ,
+                "model_name": "deepseek",
+                "ev_time": "2025/03/22"
+            })
         });
 
         if (!response.ok) {

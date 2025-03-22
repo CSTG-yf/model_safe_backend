@@ -13,7 +13,7 @@ class ProgressConsumer(AsyncWebsocketConsumer):
     
     async def connect(self):
         """建立WebSocket连接"""
-        # 从URL路径中获取评估任务的唯一标识
+        # 从URL路径中获取评估任务的唯一标识,task_id由project_id,model_name和ev_time共同决定
         self.task_id = self.scope['url_route']['kwargs'].get('task_id', 'default')
         print("self.task_id为:", self.task_id)
         self.group_name = f'jailbreak_evaluation_{self.task_id}'

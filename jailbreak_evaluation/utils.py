@@ -190,6 +190,8 @@ class ModelHandler:
                 try:
                     rating = int(match.group(1))
                     reasons = str(match1.group(1))
+                    print(f"评分：{rating}")
+                    print(f"评分理由：{reasons}")
                     return {"score":max(1, min(10, rating)),"reasons":reasons}
                 except ValueError:
                     print(f"无效的评分格式: {match.group(1)}")
@@ -661,6 +663,7 @@ def score_response(state: GraphState) -> GraphState:
     return {"score": result["score"],"reasons":result["reasons"]}
 
 def update_history(state: GraphState) -> GraphState:
+    print("更新history并发送前端")
     new_history = state["history"].copy()
     new_entry = {
         "cycle": state["cycle_count"] + 1,
