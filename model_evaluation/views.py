@@ -2,9 +2,11 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.views import View
+from django.db.models import Q
 import json
 import logging
 from typing import Dict, Any, List
+from datetime import datetime
 
 from question_bank.models import EvalQuestions
 from .service import EvaluatorService
@@ -201,9 +203,6 @@ def trigger_evaluation_halucination_toxicity(request, model_name):
             'model_name': model_name,
             'hallucination_accuracy': result.hallucination_accuracy,
             'toxicity_accuracy': result.toxicity_accuracy,
-            'average_accuracy': (result.hallucination_accuracy + result.toxicity_accuracy) / 2
-            if result.hallucination_accuracy is not None and result.toxicity_accuracy is not None
-            else None
         })
 
     except json.JSONDecodeError:
@@ -321,68 +320,13 @@ class EvaluationTaskView(View):
             logger.exception(f"创建评估任务时出错: {str(e)}")
             return JsonResponse({'error': f'服务器错误: {str(e)}'}, status=500)
 
-    def get(self, request, *args, **kwargs):
-        task_id = request.GET.get('task_id')
-        batch_id = request.GET.get('batch_id')  # 添加批次ID参数
-
-        if not task_id and not batch_id:
-            return JsonResponse({'error': '必须提供task_id或batch_id参数'}, status=400)
+    def get(self, request, task_id=None, *args, **kwargs):
+        """获取任务状态或结果"""
+        if not task_id:
+            return JsonResponse({'error': '必须提供task_id参数'}, status=400)
 
         action = request.GET.get('action', 'status')
 
-        # 通过批次ID查询
-        if batch_id and not task_id:
-            try:
-                batch_id = int(batch_id)
-                batch = EvaluationBatch.objects.get(id=batch_id)
-
-                if action == 'status':
-                    records = EvaluationRecord.objects.filter(batch_id=batch_id)
-                    return JsonResponse({
-                        'batch_id': batch.id,
-                        'name': batch.name,
-                        'total_records': batch.total_records,
-                        'completed_records': records.count(),
-                        'average_score': batch.average_score,
-                        'total_tokens': batch.total_tokens,
-                        'completed': batch.completed,
-                        'created_at': batch.created_at.isoformat()
-                    })
-
-                elif action == 'results':
-                    records = EvaluationRecord.objects.filter(batch_id=batch_id)
-                    results = [{
-                        'record_id': record.record_id,
-                        'input': record.input,
-                        'output': record.output,
-                        'score': record.score,
-                        'tokens': record.tokens,
-                        'created_at': record.created_at.isoformat()
-                    } for record in records]
-
-                    return JsonResponse({
-                        'batch': {
-                            'id': batch.id,
-                            'name': batch.name,
-                            'average_score': batch.average_score,
-                            'total_tokens': batch.total_tokens,
-                            'completed': batch.completed
-                        },
-                        'results': results
-                    })
-
-                else:
-                    return JsonResponse({'error': f'不支持对批次执行的操作: {action}'}, status=400)
-
-            except EvaluationBatch.DoesNotExist:
-                return JsonResponse({'error': f'批次 {batch_id} 不存在'}, status=404)
-            except ValueError:
-                return JsonResponse({'error': 'batch_id必须是整数'}, status=400)
-            except Exception as e:
-                logger.exception(f"查询批次时出错: {str(e)}")
-                return JsonResponse({'error': f'服务器错误: {str(e)}'}, status=500)
-
-        # 原有的task_id查询逻辑
         if action == 'status':
             status = self.evaluator_service.get_task_status(task_id)
             # 尝试添加批次信息
@@ -399,9 +343,19 @@ class EvaluationTaskView(View):
             return JsonResponse(status)
 
         elif action == 'results':
-            results = self.evaluator_service.get_task_results(task_id)
+            try:
+                page = int(request.GET.get('page', 1))
+                page_size = int(request.GET.get('page_size', 10))
+                if page < 1:
+                    return JsonResponse({'error': 'page参数必须大于0'}, status=400)
+                if page_size < 1 or page_size > 100:
+                    return JsonResponse({'error': 'page_size参数必须在1-100之间'}, status=400)
+            except ValueError:
+                return JsonResponse({'error': 'page和page_size参数必须是整数'}, status=400)
+                
+            results = self.evaluator_service.get_task_results(task_id, page=page, page_size=page_size)
             if results is not None:
-                return JsonResponse({'results': results})
+                return JsonResponse(results)
             else:
                 return JsonResponse({'error': '任务结果不可用'}, status=404)
 
@@ -436,3 +390,39 @@ class EvaluationTaskView(View):
             prepared_data.append(question_entry)
 
         return prepared_data
+
+
+class EvaluationRecordView(View):
+    """评估记录查询视图"""
+    
+    def get(self, request, record_id, *args, **kwargs):
+        """获取单个评估记录详情"""
+        try:
+            # 获取记录和关联的批次信息
+            record = EvaluationRecord.objects.get(record_id=record_id)
+            batch = EvaluationBatch.objects.get(id=record.batch_id)
+
+            # 返回详细信息
+            return JsonResponse({
+                'record_id': record.record_id,
+                'batch': {
+                    'id': batch.id,
+                    'name': batch.name,
+                    'created_at': batch.created_at.isoformat()
+                },
+                'input': record.input,
+                'output': record.output,
+                'score': record.score,
+                'tokens': record.tokens,
+                'created_at': record.created_at.isoformat()
+            })
+
+        except EvaluationRecord.DoesNotExist:
+            return JsonResponse({
+                'error': f'记录 {record_id} 不存在'
+            }, status=404)
+        except Exception as e:
+            logger.exception(f"获取评估记录详情时出错: {str(e)}")
+            return JsonResponse({
+                'error': f'服务器错误: {str(e)}'
+            }, status=500)
