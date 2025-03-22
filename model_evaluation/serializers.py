@@ -9,8 +9,18 @@ class ModelAPISerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = ModelAPI
-        fields = ['id', 'name', 'base_url', 'created_at']
+        fields = ['id', 'name', 'api_key', 'base_url', 'created_at']
         read_only_fields = ['created_at']
+
+    def create(self, validated_data):
+        """创建时必须提供 api_key"""
+        if 'api_key' not in validated_data:
+            raise serializers.ValidationError({'api_key': 'API key is required when creating a model configuration'})
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        """更新时 api_key 是可选的"""
+        return super().update(instance, validated_data)
 
 
 class EvaluationBatchSerializer(serializers.ModelSerializer):

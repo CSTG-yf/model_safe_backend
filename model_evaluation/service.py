@@ -1,11 +1,12 @@
 import logging
 import uuid
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
+import threading
 
 from .utils import Evaluator
-
 from .consumers import ProgressConsumer
+from .models import EvaluationBatch, EvaluationRecord
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,10 @@ class EvaluatorService:
         self.eval_model_name = eval_model_name
         self.active_tasks = {}
         self.executor = ThreadPoolExecutor(max_workers=5)
+        self._task_locks = {}
 
     def create_evaluator(self, task_id: str) -> Evaluator:
+        """创建评估器实例"""
         return Evaluator(
             api_key=self.api_key,
             base_url=self.base_url,
@@ -34,107 +37,229 @@ class EvaluatorService:
             logger_name=f"evaluator.task.{task_id}"
         )
 
-    def evaluate_question(self, question_data: List) -> Optional[Tuple]:
+    def _run_evaluation_task(self, task_id: str, evaluator: Evaluator, questions_data: List[List], batch_id: int):
+        """在后台线程中运行评估任务"""
         try:
-            task_id = f"single_{question_data[0]}"
-            evaluator = self.create_evaluator(task_id)
-            result = evaluator.evaluate(question_data)
-            return result
-        except Exception as e:
-            logger.exception(f"评估问题 {question_data[0]} 时出错: {str(e)}")
-            return None
+            total_questions = len(questions_data)
+            current_progress = 0
 
-    def start_evaluation_task(self, task_id: str, questions: List[List]) -> bool:
-        if task_id in self.active_tasks:
-            logger.warning(f"任务ID {task_id} 已存在")
-            return False
-
-        try:
-            evaluator = self.create_evaluator(task_id)
-            future = self.executor.submit(evaluator.evaluate_multiple, questions)
-            self.active_tasks[task_id] = {
-                'evaluator': evaluator,
-                'future': future,
-                'status': 'running'
-            }
-            return True
-        except Exception as e:
-            logger.exception(f"启动评估任务 {task_id} 时出错: {str(e)}")
-
+            # 发送任务开始消息
             ProgressConsumer.send_message({
-                "type": "error",
+                "type": "progress",
                 "data": {
-                    "record_id": "system",
-                    "message": f"启动评估任务失败: {str(e)}"
+                    "current": current_progress,
+                    "total": total_questions,
+                    "percent": 0
                 }
             }, task_id)
 
+            # 存储批次信息
+            self.active_tasks[task_id] = batch_id
+
+            # 处理每个问题
+            for question_data in questions_data:
+                if task_id not in self.active_tasks:  # 检查任务是否被取消
+                    logger.info(f"Task {task_id} was cancelled")
+                    return
+
+                # 评估单个问题
+                result = evaluator.evaluate(question_data)
+                if result:
+                    record_id, prompt, response, score, tokens = result
+                    
+                    # 更新进度
+                    current_progress += 1
+                    ProgressConsumer.send_message({
+                        "type": "progress",
+                        "data": {
+                            "current": current_progress,
+                            "total": total_questions,
+                            "percent": (current_progress / total_questions) * 100
+                        }
+                    }, task_id)
+
+            # 更新批次状态
+            batch = EvaluationBatch.objects.get(id=batch_id)
+            records = EvaluationRecord.objects.filter(batch_id=batch_id)
+            if records.exists():
+                batch.average_score = sum(r.score for r in records) / records.count()
+                batch.total_tokens = sum(r.tokens for r in records)
+            batch.completed = True
+            batch.save()
+
+            # 发送完成消息
+            ProgressConsumer.send_message({
+                "type": "summary",
+                "data": {
+                    "total_records": batch.total_records,
+                    "average_score": batch.average_score,
+                    "total_tokens": batch.total_tokens,
+                    "completed": True
+                }
+            }, task_id)
+
+        except Exception as e:
+            logger.exception(f"Task {task_id} failed: {str(e)}")
+            ProgressConsumer.send_message({
+                "type": "error",
+                "data": {
+                    "message": str(e)
+                }
+            }, task_id)
+        finally:
+            if task_id in self._task_locks:
+                del self._task_locks[task_id]
+
+    def start_evaluation_task(self, task_id: str, questions_data: List[List], batch_id: int) -> bool:
+        """启动评估任务"""
+        try:
+            if task_id in self.active_tasks:
+                return False
+
+            # 创建任务锁
+            self._task_locks[task_id] = threading.Lock()
+            
+            # 创建评估器
+            evaluator = self.create_evaluator(task_id)
+            
+            # 在线程池中启动任务
+            self.executor.submit(
+                self._run_evaluation_task,
+                task_id,
+                evaluator,
+                questions_data,
+                batch_id
+            )
+            
+            return True
+
+        except Exception as e:
+            logger.exception(f"Failed to start task {task_id}: {str(e)}")
+            if task_id in self._task_locks:
+                del self._task_locks[task_id]
             return False
 
     def get_task_status(self, task_id: str) -> Dict[str, Any]:
-        if task_id not in self.active_tasks:
-            return {'status': 'not_found'}
-
-        task = self.active_tasks[task_id]
-
-        if task['future'].done():
-            if task['future'].exception():
+        """获取任务状态"""
+        try:
+            batch_id = self.active_tasks.get(task_id)
+            if batch_id:
+                batch = EvaluationBatch.objects.get(id=batch_id)
+                records = EvaluationRecord.objects.filter(batch_id=batch_id)
                 return {
-                    'status': 'error',
-                    'error': str(task['future'].exception())
+                    'completed': batch.completed,
+                    'total_records': batch.total_records,
+                    'completed_records': records.count(),
+                    'average_score': batch.average_score,
+                    'total_tokens': batch.total_tokens
                 }
+        except Exception as e:
+            logger.exception(f"Error getting task status: {str(e)}")
+        return {'error': '无法获取任务状态'}
 
-            if task['status'] == 'running':
-                task['status'] = 'completed'
+    def get_task_batch(self, task_id: str) -> Optional[EvaluationBatch]:
+        """获取任务对应的批次"""
+        try:
+            batch_id = self.active_tasks.get(task_id)
+            if batch_id:
+                return EvaluationBatch.objects.get(id=batch_id)
+        except Exception as e:
+            logger.exception(f"Error getting task batch: {str(e)}")
+        return None
 
+    def get_task_results(self, task_id: str, page: int = 1, page_size: int = 10) -> Optional[Dict[str, Any]]:
+        """获取任务结果
+        
+        Args:
+            task_id: 任务ID
+            page: 页码，从1开始
+            page_size: 每页记录数
+            
+        Returns:
+            包含任务结果、统计信息和分页信息的字典
+        """
+        try:
+            batch_id = self.active_tasks.get(task_id)
+            if not batch_id:
+                return None
+                
+            # 获取批次信息
+            batch = EvaluationBatch.objects.get(id=batch_id)
+            
+            # 获取所有记录
+            all_records = EvaluationRecord.objects.filter(batch_id=batch_id)
+            total_records = all_records.count()
+            
+            # 计算分页
+            start = (page - 1) * page_size
+            end = start + page_size
+            records = all_records[start:end]
+            
+            # 计算统计信息
+            total_tokens = sum(record.tokens for record in all_records)
+            avg_score = sum(record.score for record in all_records) / total_records if total_records > 0 else 0
+            
             return {
-                'status': task['status'],
-                'results': task['evaluator'].get_results()
+                'task_id': task_id,
+                'batch': {
+                    'id': batch.id,
+                    'name': batch.name,
+                    'created_at': batch.created_at.isoformat(),
+                    'completed': batch.completed
+                },
+                'statistics': {
+                    'total_records': total_records,
+                    'total_tokens': total_tokens,
+                    'average_score': round(avg_score, 4)
+                },
+                'pagination': {
+                    'current_page': page,
+                    'page_size': page_size,
+                    'total_pages': (total_records + page_size - 1) // page_size
+                },
+                'records': [{
+                    'record_id': record.record_id,
+                    'input': record.input,
+                    'output': record.output,
+                    'score': record.score,
+                    'tokens': record.tokens,
+                    'created_at': record.created_at.isoformat()
+                } for record in records]
             }
-        else:
-            return {'status': 'running'}
+            
+        except Exception as e:
+            logger.exception(f"Error getting task results: {str(e)}")
+            return None
 
     def cancel_task(self, task_id: str) -> bool:
-        if task_id not in self.active_tasks:
-            return False
-
+        """取消任务"""
         try:
-            task = self.active_tasks[task_id]
-            cancelled = task['future'].cancel()
-
-            if cancelled:
-                task['status'] = 'cancelled'
-
+            if task_id in self.active_tasks:
+                del self.active_tasks[task_id]
                 ProgressConsumer.send_message({
                     "type": "progress",
                     "data": {
-                        "current": 0,
-                        "total": 0,
-                        "percent": 0,
-                        "status": "cancelled"
+                        "status": "cancelled",
+                        "message": "任务已取消"
                     }
                 }, task_id)
-
                 return True
-            else:
-                return False
         except Exception as e:
-            logger.exception(f"取消任务 {task_id} 时出错: {str(e)}")
-            return False
-
-    def get_task_results(self, task_id: str) -> Optional[List[Dict[str, Any]]]:
-        status = self.get_task_status(task_id)
-
-        if status['status'] == 'completed':
-            return status['results']
-
-        return None
+            logger.exception(f"Error cancelling task: {str(e)}")
+        return False
 
     def cleanup_task(self, task_id: str) -> bool:
-        if task_id in self.active_tasks:
-            del self.active_tasks[task_id]
+        """清理任务资源"""
+        try:
+            if task_id in self.active_tasks:
+                del self.active_tasks[task_id]
+            if task_id in self._task_locks:
+                del self._task_locks[task_id]
             return True
+        except Exception as e:
+            logger.exception(f"Error cleaning up task: {str(e)}")
         return False
 
     def get_new_task_id(self) -> str:
-        return f"task_{uuid.uuid4()}"
+        """生成新的任务ID"""
+        return str(uuid.uuid4())
