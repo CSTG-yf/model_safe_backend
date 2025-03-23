@@ -8,7 +8,6 @@ import pymysql
 import os
 import django
 
-from model_evaluation.consumers import ProgressConsumer
 from .models import  ModelEvaluationHALUCINATION_TOXICITY
 
 from phoenix.evals import (
@@ -141,20 +140,17 @@ def run_full_evaluation(api_key, base_url, model_name, sample_size=100):
     return result
 
 class Evaluator:
-    def __init__(self, api_key, base_url, model_name, eval_api_key, eval_base_url, eval_model_name, task_id='default', logger_name=__name__):
+    def __init__(self, api_key, base_url, model_name, eval_api_key, eval_base_url, eval_model_name, question_bank_id, logger_name=__name__):
         self.api_key = api_key
         self.base_url = base_url
         self.model_name = model_name
         self.eval_api_key = eval_api_key
         self.eval_base_url = eval_base_url
         self.eval_model_name = eval_model_name
+        self.question_bank_id = question_bank_id
         self.results = []
-        self.task_id = task_id
         self.logger = logging.getLogger(logger_name)
-        self.batch = EvaluationBatch.objects.create(
-            name=f"Evaluation {self.task_id}",
-            created_at=timezone.now()
-        )
+        
 
     def _get_response(self, api_key, base_url, system_prompt, user_prompt, temperature=0.3):
         try:
@@ -177,19 +173,11 @@ class Evaluator:
             print(f"Error during OpenAI API call: {e}")
             return None
 
-    def _send_progress(self, progress_type, data):
-        ProgressConsumer.send_message({
-            "type": progress_type,
-            "data": data
-            },
-            self.task_id
-        )
-
     def _save_to_db(self, record_id, prompt, response, score, tokens):
         try:
             # 创建评估记录
             EvaluationRecord.objects.create(
-                batch=self.batch,
+                question_bank_id=self.question_bank_id,
                 record_id=record_id,
                 input=prompt,
                 output=response,
@@ -198,12 +186,13 @@ class Evaluator:
             )
 
             # 更新批次信息
-            self.batch.total_records = EvaluationRecord.objects.filter(batch=self.batch).count()
-            records = EvaluationRecord.objects.filter(batch=self.batch)
-            self.batch.average_score = sum(
-                r.score for r in records) / self.batch.total_records if self.batch.total_records > 0 else 0.0
-            self.batch.total_tokens = sum(r.tokens for r in records)
-            self.batch.save()
+            batch = EvaluationBatch.objects.get(question_bank_id=self.question_bank_id)
+            batch.total_records = EvaluationRecord.objects.filter(question_bank_id=self.question_bank_id).count()
+            records = EvaluationRecord.objects.filter(question_bank_id=self.question_bank_id)
+            batch.average_score = sum(
+                r.score for r in records) / batch.total_records if batch.total_records > 0 else 0.0
+            batch.total_tokens = sum(r.tokens for r in records)
+            batch.save()
 
             self.logger.info(f"Saved record {record_id} to database")
             return True
@@ -260,35 +249,17 @@ class Evaluator:
             }
             self.results.append(result)
 
-            self._send_progress('record_result',{
-                "record_id": record_id,
-                "input": prompt,
-                "output": response,
-                "score": eval_response,
-                "tokens": total_tokens
-            })
-
             self._save_to_db(record_id, prompt, response, eval_response, total_tokens)
 
             return record_id, prompt, response, eval_response, total_tokens
 
         except Exception as e:
-            self._send_progress('error', {
-                "record_id": record_id,
-                "message": str(e)
-            })
             self.logger.exception(f"Unexpected error in evaluate: {str(e)}")
             return None
 
     def evaluate_multiple(self, questions):
         total = len(questions)
         for idx, question in enumerate(questions):
-            self._send_progress('progress', {
-                "current": idx + 1,
-                "total": total,
-                "percent": round(((idx + 1) / total) * 100, 1)
-            })
-
             self.evaluate(question)
 
         if not self.results:
@@ -303,13 +274,6 @@ class Evaluator:
         except ZeroDivisionError:
             avg_score = 0.0
             self.logger.error("Division by zero when calculating average score")
-
-        self._send_progress('summary', {
-            "total_records": len(self.results),
-            "average_score": avg_score,
-            "total_tokens": total_tokens
-        })
-
 
     def get_results(self):
         return self.results

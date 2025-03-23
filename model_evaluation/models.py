@@ -38,21 +38,22 @@ class EvaluationBatch(models.Model):
     """
     记录一个批次的最终评估结果
     """
+    id = models.AutoField(primary_key=True)
     created_at = models.DateTimeField(default=timezone.now)
-    name = models.CharField(max_length=255, null=True, blank=True)
+    model_name = models.CharField(max_length=255, null=True, blank=True)
+    question_bank_id = models.CharField(max_length=255, null=True, blank=True)
     total_records = models.IntegerField(default=0)
     average_score = models.FloatField(default=0.0)
     total_tokens = models.IntegerField(default=0)
-    completed = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"Batch {self.id}: {self.name or 'Unnamed'} ({self.created_at.strftime('%Y-%m-%d')})"
+        return f"Batch {self.id}: {self.model_name or 'Unnamed'} ({self.created_at.strftime('%Y-%m-%d')})"
 
 class EvaluationRecord(models.Model):
     """
     记录每一次评估结果
     """
-    batch = models.ForeignKey(EvaluationBatch, on_delete=models.CASCADE, related_name='records')
+    question_bank_id = models.ForeignKey(EvaluationBatch, on_delete=models.CASCADE, related_name='records')
     record_id = models.CharField(max_length=255)
     input = models.TextField()
     output = models.TextField()
