@@ -26,17 +26,17 @@ class ProjectListCreateView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        """ 获取当前用户创建或加入的项目 """
+        """ 获取当前用户创建或加入的项目  """
         projects = Project.objects.filter(
             models.Q(created_by=request.user) |
             models.Q(members__user=request.user)
-        ).distinct()
-        serializer = ProjectSerializer(projects, many=True)
+        ).distinct().values("id", "name")
+
         return Response({
             "result": "success",
             "message": "获取项目列表成功",
-            "projects": serializer.data
-        })
+            "projects": list(projects)
+        }, status=200)
 
     def post(self, request):
         """ 创建新项目 """

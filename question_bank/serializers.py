@@ -22,4 +22,5 @@ class EvalQuestionsSerializer(serializers.ModelSerializer):
 class BasicEvalQuestionsSerializer(serializers.ModelSerializer):
     class Meta:
         model = EvalQuestions
-        fields = ["question_bank_id", "exam_title", "description", "project_id", "created_at"]
+        fields = ["question_bank_id", "exam_title", "description"]
+

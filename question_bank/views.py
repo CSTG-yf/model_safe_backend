@@ -4,8 +4,6 @@ from django.shortcuts import get_object_or_404
 from .models import EvalQuestions, SecurityQuestions
 from .serializers import EvalQuestionsSerializer, SecurityQuestionsSerializer,BasicEvalQuestionsSerializer
 from members.models import ProjectMember
-import random
-from django.utils.timezone import now
 from .services import generated_questions_and_add_to_database
 
 
@@ -124,17 +122,17 @@ class SecurityQuestionListView(generics.ListAPIView):
 
 
 class SingleQuestionBankView(views.APIView):
-    """ 获取单个观测题库的具体内容 """
-    permission_classes = [permissions.IsAuthenticated]
+    """ 获取单个观测题库的题目 """
+    # permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, question_bank_id):
-        """ 获取某个题库的详细内容 """
+        """ 获取某个题库的 `questions` 字段 """
         question_bank = get_object_or_404(EvalQuestions, question_bank_id=question_bank_id)
-        serializer = EvalQuestionsSerializer(question_bank)
+
         return Response({
             "result": "success",
-            "message": "获取题库详情成功",
-            "question_bank": serializer.data
+            "message": "获取题目列表成功",
+            "questions": question_bank.questions  # 只返回 `questions` 字段
         }, status=status.HTTP_200_OK)
 
 
