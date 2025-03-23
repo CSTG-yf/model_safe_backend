@@ -16,7 +16,8 @@ async function startWorkflow() {
             body: JSON.stringify({
                 "project_id": 1 ,
                 "model_name": "deepseek",
-                "ev_time": "2025/03/22"
+                "ev_time": "2025/03/22",
+                "mode": 3
             })
         });
 

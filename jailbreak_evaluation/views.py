@@ -16,9 +16,10 @@ class StartWorkflowAPI(APIView):
         project_id = data['project_id']
         model_name = data['model_name']
         ev_time = data['ev_time']
+        mode = data['mode']
 
         try:
-            run_jailbreak_workflow.delay(model_name, ev_time,project_id)
+            run_jailbreak_workflow.delay(model_name, ev_time,project_id,mode)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
