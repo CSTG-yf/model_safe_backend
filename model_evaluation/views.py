@@ -296,7 +296,7 @@ class EvaluationTaskView(View):
             success = self.evaluator_service.start_evaluation_task(
                 task_id,
                 questions_data,
-                batch_id=batch.id
+                # batch_id=batch.id
             )
 
             if success:

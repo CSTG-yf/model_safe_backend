@@ -2,7 +2,7 @@
 async function startWorkflow() {
     try {
         // 启动 WebSocket 连接
-        const wsConnected = await connectWebSocket();
+        const wsConnected = await connectWebSocket("1_deepseek_20250323_3");
         if (!wsConnected) {
             console.error('WebSocket 连接失败，停止后续操作');
             return;
@@ -13,6 +13,12 @@ async function startWorkflow() {
             headers: {
                 'Content-Type': 'application/json'
             },
+            body: JSON.stringify({
+                "project_id": 1 ,
+                "model_name": "deepseek",
+                "ev_time": "20250323",
+                "mode": 3
+            })
         });
 
         if (!response.ok) {

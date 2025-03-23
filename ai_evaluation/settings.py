@@ -167,3 +167,13 @@ SIMPLE_JWT = {
 # 默认模型配置
 DEFAULT_MODEL_NAME = "moonshot-v1-8k"  # 默认评估模型
 DEFAULT_EVAL_MODEL_NAME = "deepseek-v3"  # 默认评分模型
+
+#channel配置
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}

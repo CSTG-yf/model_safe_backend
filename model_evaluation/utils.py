@@ -279,23 +279,6 @@ class Evaluator:
         return self.results
 
 
-if __name__ == "__main__":
-    # 配置日志
-    logging.basicConfig(level=logging.INFO)
-
-    evaluator = Evaluator(
-        api_key=api,
-        base_url=url,
-        model_name=myModel,
-        eval_api_key=api,
-        eval_base_url=url,
-        eval_model_name=myModel,
-        # task_id="task_123"
-    )
-
-    evaluator.evaluate_multiple([1, 2, 3])
-    results = evaluator.get_results()
-
 
 
 
