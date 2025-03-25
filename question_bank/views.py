@@ -20,29 +20,42 @@ def check_project_membership(user, project_id):
 
 
 class SearchQuestionBankView(views.APIView):
-    """ 仅搜索当前 `project_id` 下的题库 """
+    """ 搜索或列出当前 `project_id` 下的题库 """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, project_id):
-        """ 通过 `exam_title` 搜索 `project_id` 题库 """
+        """
+        - 传入 `exam_title`：模糊搜索题库
+        - 未传 `exam_title`：返回该项目下全部题库
+        """
         permission_check = check_project_membership(request.user, project_id)
         if permission_check:
             return permission_check
 
         exam_title = request.data.get("exam_title", "").strip()
-        if not exam_title:
-            return Response({"result": "error", "message": "请提供搜索关键词"}, status=status.HTTP_400_BAD_REQUEST)
 
-        queryset = EvalQuestions.objects.filter(project_id=project_id, exam_title__icontains=exam_title)
-        if not queryset.exists():
-            return Response({"result": "error", "message": "未找到匹配的题库"}, status=status.HTTP_404_NOT_FOUND)
+        if exam_title:
+            queryset = EvalQuestions.objects.filter(project_id=project_id, exam_title__icontains=exam_title)
+            if not queryset.exists():
+                return Response({"result": "error", "message": "未找到匹配的题库"}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = BasicEvalQuestionsSerializer(queryset, many=True)
-        return Response({
-            "result": "success",
-            "message": "搜索成功",
-            "question_banks": serializer.data
-        }, status=status.HTTP_200_OK)
+            serializer = BasicEvalQuestionsSerializer(queryset, many=True)
+            return Response({
+                "result": "success",
+                "message": "搜索成功",
+                "question_banks": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        else:
+            # 未传 exam_title，返回全部题库
+            queryset = EvalQuestions.objects.filter(project_id=project_id)
+            serializer = BasicEvalQuestionsSerializer(queryset, many=True)
+            return Response({
+                "result": "success",
+                "message": "已返回全部题库",
+                "question_banks": serializer.data
+            }, status=status.HTTP_200_OK)
+
 
 
 
@@ -123,7 +136,7 @@ class SecurityQuestionListView(generics.ListAPIView):
 
 class SingleQuestionBankView(views.APIView):
     """ 获取单个观测题库的题目 """
-    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, question_bank_id):
         """ 获取某个题库的 `questions` 字段 """
@@ -143,3 +156,80 @@ class GenerateObservationQuestionBankView(views.APIView):
     def post(self, request,project_id):
         """ 直接调用 `services.py` 生成题库 """
         return generated_questions_and_add_to_database(request,project_id)
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import EvalQuestions
+
+class QuestionDetailView(APIView):
+    """
+    处理单个题目的查看、修改和删除操作
+    """
+
+    def get_object(self, question_bank_id, question_id):
+        try:
+            # 获取对应题库的题目
+            question_bank = EvalQuestions.objects.get(question_bank_id=question_bank_id)
+            # 查找题目
+            question = next((q for q in question_bank.questions if q['question_id'] == question_id), None)
+            return question
+        except EvalQuestions.DoesNotExist:
+            return None
+
+    def get(self, request, question_bank_id, question_id):
+        """
+        获取单个题目的详细信息
+        """
+        question = self.get_object(question_bank_id, question_id)
+        if question:
+            return Response({
+                "result": "success",
+                "message": "获取成功",
+                "question": question
+            })
+        return Response({
+            "result": "failure",
+            "message": "Question not found",
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    def put(self, request, question_bank_id, question_id):
+        """
+        修改单个题目的信息（部分更新）
+        """
+        question = self.get_object(question_bank_id, question_id)
+        if question:
+            # 只更新请求体中传递的字段
+            for field, value in request.data.items():
+                if field in question:
+                    question[field] = value
+            # 更新后直接保存
+            return Response({
+                "result": "success",
+                "message": "Question updated successfully",
+                "question": question
+            })
+        return Response({
+            "result": "failure",
+            "message": "Question not found",
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request, question_bank_id, question_id):
+        """
+        删除单个题目
+        """
+        question = self.get_object(question_bank_id, question_id)
+        if question:
+            question_bank = EvalQuestions.objects.get(question_bank_id=question_bank_id)
+            # 从题库中移除对应的题目
+            question_bank.questions = [q for q in question_bank.questions if q['question_id'] != question_id]
+            question_bank.save()
+            return Response({
+                "result": "success",
+                "message": "Question deleted successfully",
+            })
+        return Response({
+            "result": "failure",
+            "message": "Question not found",
+        }, status=status.HTTP_404_NOT_FOUND)

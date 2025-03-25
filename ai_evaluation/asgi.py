@@ -14,6 +14,9 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 import jailbreak_evaluation.routing
 
+import sys
+print(sys.path)  # 检查是否有重复路径
+
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ai_evaluation.settings')
 
 application = ProtocolTypeRouter({

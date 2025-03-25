@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     SearchQuestionBankView, QuestionBankUpdateDeleteView,
-    SecurityQuestionListView, SingleQuestionBankView, GenerateObservationQuestionBankView
+    SecurityQuestionListView, SingleQuestionBankView, GenerateObservationQuestionBankView,QuestionDetailView
 )
 
 urlpatterns = [
@@ -19,4 +19,7 @@ urlpatterns = [
 
     # 生成观测题库
     path('<int:project_id>/generate/', GenerateObservationQuestionBankView.as_view(), name='generate_observation_bank'),
+
+    # 获取、修改、删除单个题目
+    path('<int:question_bank_id>/question/<int:question_id>/', QuestionDetailView.as_view(), name='question_detail'),
 ]

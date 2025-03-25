@@ -37,7 +37,7 @@ class EvalQuestions(models.Model):
     # questions 示例：
     # [
     #     {
-    #         "question_id": 1
+    #         "question_id": 1,
     #         "source": "SecurityQuestions",
     #         "content_type": "",
     #         "question_type": "",
@@ -47,7 +47,7 @@ class EvalQuestions(models.Model):
     #         "scoring_criteria": "评分标准"
     #     },
     #     {
-    #         "question_id": 2
+    #         "question_id": 2,
     #         "source": "llm",
     #         "content_type": "",
     #         "question_type": "",

@@ -43,7 +43,6 @@ INSTALLED_APPS = [
     'rest_framework',
     'core',
     'question_bank',
-    'model_testing',
     'model_evaluation',
     'report_generation',
     'jailbreak_evaluation',
