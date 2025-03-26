@@ -5,6 +5,8 @@ from .models import EvalQuestions, SecurityQuestions
 from .serializers import EvalQuestionsSerializer, SecurityQuestionsSerializer,BasicEvalQuestionsSerializer
 from members.models import ProjectMember
 from .services import generated_questions_and_add_to_database
+from django.utils import timezone
+
 
 
 def check_project_membership(user, project_id):
@@ -153,17 +155,32 @@ class GenerateObservationQuestionBankView(views.APIView):
     """ 生成观测题库（调用 AI + 安全题库）"""
     permission_classes = [permissions.IsAuthenticated]
 
+    def get(self, request, project_id):
+        """ 获取预生成题库id """
+        try:
+            # 创建 EvalQuestions 实例
+            eval_question = EvalQuestions.objects.create(
+                exam_title=None,
+                project_id=project_id,
+                created_at=timezone.now(),
+                questions=None,
+            )
+            return Response({
+                'message': 'success',
+                'question_bank_id': eval_question.question_bank_id
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "message": "error",
+                'question_bank_id': None
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     def post(self, request,project_id):
         """ 直接调用 `services.py` 生成题库 """
         return generated_questions_and_add_to_database(request,project_id)
 
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .models import EvalQuestions
-
-class QuestionDetailView(APIView):
+class QuestionDetailView(views.APIView):
     """
     处理单个题目的查看、修改和删除操作
     """
