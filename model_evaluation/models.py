@@ -109,7 +109,6 @@ class OverallResult(models.Model):
     """
     记录最终的评估结果
     """
-    id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255,blank=True,null=True, help_text="模型评估结果名称")
     description = models.TextField(blank=True, null=True, help_text="模型评估结果说明")
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='overall_results')
@@ -125,10 +124,7 @@ class OverallResult(models.Model):
         verbose_name = "模型评估结果"
         verbose_name_plural = "模型评估结果"
         db_table = "overall_result"
-        indexes = [
-            models.Index(fields=['id']),
-            models.Index(fields=['project_score']),
-        ]
+
 
     def __str__(self):
         return f"记录 {self.id} (模型评估结果: {self.project_score})"

@@ -3,6 +3,8 @@ from datetime import datetime
 
 import openai
 import json
+import json5
+import demjson3
 import random
 
 class QuestionGenerator:
@@ -236,7 +238,8 @@ class QuestionGenerator:
         请为指定领域设计高质量题目，确保题目难度困难，知识点覆盖全面，答案和评分标准清晰。
         """
 
-    def generate_questions(self, content_type, question_type, question_num=1, temperature=None,example_question ="",example_answer=""):
+    def generate_questions(self, content_type, question_type, question_num=1, temperature=None, example_question="",
+                           example_answer=""):
         """
         生成新题目
 
@@ -278,49 +281,75 @@ class QuestionGenerator:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=temperature
+                temperature=temperature,
+                response_format={"type": "json_object"}
             )
 
             response = completion.choices[0].message.content
-            print("原始响应:", response)  # 添加调试输出
 
+            # 新版清洗逻辑（仅处理Markdown代码块）
             json_str = response.strip()
-            if "```json" in json_str:
-                start_index = json_str.find("```json") + 7
-                end_index = json_str.find("```", start_index)
-                if end_index != -1:
-                    json_str = json_str[start_index:end_index].strip()
-            elif "```" in json_str:
-                start_index = json_str.find("```") + 3
-                end_index = json_str.find("```", start_index)
-                if end_index != -1:
-                    json_str = json_str[start_index:end_index].strip()
-            
-            print("清理后的JSON字符串:", json_str)  # 添加调试输出
+            json_str = json_str.replace("```json", "").replace("```", "").strip()
+
+            # 处理所有正斜杠转义（兼容Python低版本）
+            json_str = json_str.replace(r'\/', '/')
 
             try:
-                questions = json.loads(json_str)
-                return questions
-            except json.JSONDecodeError as e:
-                print(f"JSON解析错误: {str(e)}")  # 添加错误输出
-                print(f"问题JSON字符串: {json_str}")  # 添加问题字符串输出
-                return {"error": "无法解析为JSON", "raw_response": response}
+                # 优先使用json5解析（支持非标准JSON）
+                print(json5.loads(json_str))
+                return json5.loads(json_str)
+            except Exception as e:
+                print(f"JSON5解析失败，尝试demjson3: {str(e)}")
+                try:
+                    # 使用demjson3处理更复杂的格式
+                    return demjson3.decode(json_str)
+                except demjson3.JSONDecodeError as e2:
+                    print(f"最终JSON解析失败: {str(e2)}")
+                    return {
+                        "error": "Invalid JSON",
+                        "detail": str(e2),
+                        "raw_response": response
+                    }
 
         except Exception as e:
             return {"error": str(e)}
 
-    def _mulit_generate_questions(self,question_num,content_type, question_type):
+    def _mulit_generate_questions(self, question_num, content_type, question_type):
+        """
+        批量生成题目
+        """
         question_list = []
+        error_count = 0
+        max_retries = 3
+
         for i in range(question_num):
-            questions = self.generate_questions(
-                content_type,
-                question_type,
-                question_num=1,
-                temperature=None,
-            )
-            question_list.append(questions)
-            print(f"第{i + 1}次生成成功")
+            retry = 0
+            while retry < max_retries:
+                result = self.generate_questions(
+                    content_type,
+                    question_type,
+                    question_num=1,
+                    temperature=None,
+                )
+
+                if isinstance(result, dict) and "error" not in result:
+                    # 处理可能返回的单个题目对象
+                    if isinstance(result, list):
+                        question_list.extend(result)
+                    else:
+                        question_list.append(result)
+                    break
+                else:
+                    retry += 1
+                    print(f"第 {i + 1} 题生成失败，重试 {retry}/{max_retries}")
+                    if retry == max_retries:
+                        error_count += 1
+                        print(f"第 {i + 1} 题生成最终失败: {result.get('error', '未知错误')}")
+
+        print(f"批量生成完成，成功 {question_num - error_count} 题，失败 {error_count} 题")
         return question_list
+
+
 
 
 

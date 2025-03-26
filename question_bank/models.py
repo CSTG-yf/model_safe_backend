@@ -23,11 +23,11 @@ class EvalQuestions(models.Model):
     观测题库模型
     """
     question_bank_id = models.AutoField(primary_key=True)  # 自动递增主键
-    exam_title = models.CharField(max_length=255) #题库名称
+    exam_title = models.CharField(max_length=255, null=True, blank=True) #题库名称
     description = models.TextField(blank=True, null=True) #题库描述
     project_id = models.ForeignKey(Project, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)  # 创建时间，默认当前时间
-    questions = models.JSONField()  # 题目内容，使用 JSON 字段
+    questions = models.JSONField(default=list,null=True, blank=True)  # 题目内容，使用 JSON 字段
 
     class Meta:
         db_table = "eval_questions"

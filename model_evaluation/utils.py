@@ -90,13 +90,14 @@ class Evaluator:
         """
         import uuid
 
+        record_id = None
         try:
             record_id = question_dict.get("record_id") or str(uuid.uuid4())
-            question = question_dict["question"]
-            options = question_dict["options"]
-            answer = question_dict["answer"]
-            criteria = question_dict["scoring_criteria"]
-            content_type = question_dict["content_type"]
+            question = question_dict.get("question", "")
+            options = question_dict.get("options", [])
+            answer = question_dict.get("answer", "")
+            criteria = question_dict.get("scoring_criteria", {})
+            content_type = question_dict.get("content_type", "unknown")
 
             input_text = {
                 "question": question,
@@ -106,7 +107,10 @@ class Evaluator:
             }
 
             # 构造主模型提示
-            prompt = f"问题是{question}，选项是{options}。请你回答一个正确的选项，并说明原因。"
+            if options:  # 选择题
+                prompt = f"问题是：{question}\n选项是：{options}\n请你回答一个正确的选项，并说明原因。"
+            else:  # 简答题
+                prompt = f"问题是：{question}\n请你回答，并说明原因。"
 
             # 主模型响应
             response, usage = self._get_response(

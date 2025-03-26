@@ -41,7 +41,7 @@ class OverallResultSerializer(serializers.ModelSerializer):
             'id',
             'name',
             'description',
-            'project',
+            'project_id',
             'project_score',
             'total_tokens',
             'hallucination_accuracy',
@@ -49,3 +49,7 @@ class OverallResultSerializer(serializers.ModelSerializer):
             'total_samples',
             'created_at'
         ]
+class OverallResultBasicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OverallResult
+        fields = ['id', 'name', 'description','created_at']  # 仅包含基本字段

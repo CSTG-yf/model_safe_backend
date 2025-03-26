@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import EvaluationCreateView, EvaluationRunView, EvaluationListView, OverallResultRunView, OverallResultListView, OverallResultRecordView
+from .views import EvaluationCreateView, EvaluationRunView, EvaluationListView, OverallResultView, OverallResultListView
 
 urlpatterns = [
     # 创建评测记录
@@ -11,12 +11,14 @@ urlpatterns = [
     # 获取评测记录列表
     path("list/",EvaluationListView.as_view(),name="evaluation-list",),
 
-    # 模型评估（GET: 触发评估, POST: 修改评估名称）
-    path("overall-result/run/", OverallResultRunView.as_view(), name="overall-result-run"),
+    # 获取项目评估结果列表 (GET /overall-results/?project_id=<project_id>)
+    path("overall-results/", OverallResultListView.as_view(), name="overall-result-list"),
 
-    # 获取项目模型评估结果列表
-    path('overall-results/', OverallResultListView.as_view(), name='overall-result-list'),
+    # 创建新的模型评估 (POST /overall-result/)
+    path("overall-result/", OverallResultView.as_view(), name="overall-result-create"),
 
-    # 获取模型评估结果记录
-    path('overall-result/<int:overall_result_id>/', OverallResultRecordView.as_view(), name='overall-result-record'),
+    # 获取单个评估结果详情 (GET /overall-result/<pk>/)
+    # 更新评估结果名称 (PUT /overall-result/<pk>/)
+    path("overall-result/<int:pk>/", OverallResultView.as_view(), name="overall-result-detail"),
+
 ]

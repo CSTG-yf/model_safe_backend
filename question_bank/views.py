@@ -1,13 +1,15 @@
 from rest_framework import status, generics, permissions, views
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-
-from projects.models import Project
 from .models import EvalQuestions, SecurityQuestions
 from .serializers import EvalQuestionsSerializer, SecurityQuestionsSerializer,BasicEvalQuestionsSerializer
 from members.models import ProjectMember
 from .services import generated_questions_and_add_to_database
 from django.utils import timezone
+from projects.models import Project
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -174,16 +176,21 @@ class GenerateObservationQuestionBankView(views.APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logger.exception(f"创建 EvalQuestions 失败: {str(e)}")  # 记录详细错误日志
             return Response({
                 "message": "error",
                 'question_bank_id': None
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def post(self, request,project_id):
         """ 直接调用 `services.py` 生成题库 """
         return generated_questions_and_add_to_database(request,project_id)
 
 
 class QuestionDetailView(views.APIView):
+
+    permission_classes = [permissions.AllowAny]
+
     """
     处理单个题目的查看、修改和删除操作
     """
