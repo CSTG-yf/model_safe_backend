@@ -2,8 +2,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.shortcuts import get_object_or_404
-from .models import EvaluationBatch, ModelEvalMetrics
-from .serializers import EvaluationBatchSerializer, SimpleEvaluationBatchSerializer
+from django.db.models import Avg, Sum
+from django.utils import timezone
+from .models import EvaluationBatch, ModelEvalMetrics, EvaluationRecord, OverallResult
+from .serializers import EvaluationBatchSerializer, SimpleEvaluationBatchSerializer, OverallResultSerializer
 from .utils import Evaluator
 from projects.models import Project
 from question_bank.models import EvalQuestions
@@ -170,3 +172,205 @@ class EvaluationListView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+
+class OverallResultRunView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        """
+        开始模型评估
+        :param request: 包含项目ID和测试ID的数组的查询参数
+        :return: 评估的ID
+        """
+        project_id = request.query_params.get("project_id")
+        if not project_id:
+            return Response(
+                {"error": "缺少必要参数：project_id"}, 
+                status=status.HTTP_400_BAD_REQUEST
+                )
+
+        batch_ids = request.query_params.getlist("batch_ids")
+        if not batch_ids:
+            return Response(
+                {"error": "缺少必要的参数: batch_ids"}, 
+                status=status.HTTP_400_BAD_REQUEST
+                )
+
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {"error": f"项目ID {project_id} 不存在"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        # 获得查询的评估批次
+        evaluations = EvaluationBatch.objects.filter(project=project, id__in=batch_ids).order_by(
+            "-created_at"
+        )
+
+        total_samples_sum = evaluations.aggregate(total_samples=Sum('total_samples'))['total_samples'] or 0
+        total_tokens_sum = evaluations.aggregate(total_tokens=Sum('total_tokens'))['total_tokens'] or 0
+        
+
+        model_names = set(evaluation.model_name for evaluation in evaluations)
+
+        # 检查是否只有一个唯一的model_name
+        if len(model_names) != 1:
+            return Response(
+                {"error": "存在多个不同的 model_name"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        model_name = model_names.pop()
+
+        try:
+            metrics = ModelEvalMetrics.objects.get(model_name=model_name)
+            hallucination_accuracy = metrics.hallucination_accuracy
+            toxicity_accuracy = metrics.toxicity_accuracy
+        except ModelEvalMetrics.DoesNotExist:
+            return Response(
+                {"error": f"未找到模型 {model_name} 的评估指标"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        # 获得评估批次中的记录
+        evaluation_records = EvaluationRecord.objects.filter(evaluation__in=evaluations)
+        
+        content_type_avg_scores = evaluation_records.values('content_type').annotate(avg_score=Avg('score'))
+
+        project_score = {record['content_type']: record['avg_score'] for record in content_type_avg_scores}
+        if not project_score:
+            project_score = {}
+
+        overall_result = OverallResult.objects.create(
+            name=f"评估结果_{project.name}",
+            description=f"{project.name}的评估结果细节",
+            project_score=project_score,
+            total_tokens=total_tokens_sum,
+            hallucination_accuracy=hallucination_accuracy,
+            toxicity_accuracy=toxicity_accuracy,
+            total_samples=total_samples_sum,
+        )
+
+        return Response(
+            {
+                "message": "模型评估成功",
+                "data": overall_result.id,
+            },
+            status=status.HTTP_200_OK,
+        )
+    
+    def post(self, request):
+        """
+        设置评估模型结果的名称
+        :param request: JSON，包含 overall_result_id 和新的 name
+        :return: 操作结果
+        """
+        overall_result_id = request.data.get("overall_result_id")
+        new_name = request.data.get("name")
+
+        if not overall_result_id or not new_name:
+            return Response(
+                {"error": "缺少必要参数：overall_result_id 或 name"},
+                status=status.HTTP_400_BAD_REQUEST
+                )
+
+        try:
+            overall_result = OverallResult.objects.get(id=overall_result_id)
+        except OverallResult.DoesNotExist:
+            return Response(
+                {"error": f"评估结果 ID {overall_result_id} 不存在"},
+                status=status.HTTP_404_NOT_FOUND
+                )
+
+        overall_result.name = new_name
+        overall_result.save()
+
+        return Response(
+            {"message": "评估名称更新成功", "data": overall_result.id},
+            status=status.HTTP_200_OK
+            )
+    
+
+class OverallResultListView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        """
+        获取评估结果列表
+        :param request: 包含 project_id
+        :return: 模型评估结果列表
+        """
+        project_id = request.query_params.get("project_id")
+        if not project_id:
+            return Response(
+                {"error": "缺少必要参数：project_id"}, 
+                status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {"error": f"项目ID {project_id} 不存在"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        overall_results = OverallResult.objects.filter(project=project,).order_by(
+            "-created_at"
+        )
+
+        serializer = OverallResultSerializer(overall_results, many=True)
+
+        return Response(
+            {
+                "message": "项目评估模型列表获取成功",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+
+class OverallResultRecordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        """
+        获取评估结果记录
+        :param request: 包含 overall_result_id
+        :return: 模型评估结果记录
+        """
+        overall_result_id = request.query_params.get("overall_result_id")
+        if not overall_result_id:
+            return Response(
+                {"error": "缺少必要参数：overall_result_id"}, 
+                status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        overall_result = OverallResult.objects.filter(id=overall_result_id)
+
+        serializer = OverallResultSerializer(overall_result)
+
+        return Response(
+            {
+                "message": "评估模型记录获取成功",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+
+    
+
+
+
+
+
+
+        
+    

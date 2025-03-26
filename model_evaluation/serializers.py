@@ -1,7 +1,7 @@
 # model_evaluation/serializers.py
 
 from rest_framework import serializers
-from .models import EvaluationBatch, ModelEvalMetrics
+from .models import EvaluationBatch, ModelEvalMetrics, OverallResult
 
 class EvaluationBatchSerializer(serializers.ModelSerializer):
     project_id = serializers.IntegerField(source='project.id')
@@ -29,5 +29,23 @@ class SimpleEvaluationBatchSerializer(serializers.ModelSerializer):
             'name',
             'description',
             'is_reviewed',
+            'created_at'
+        ]
+
+class OverallResultSerializer(serializers.ModelSerializer):
+    project_id = serializers.IntegerField(source='project.id')
+
+    class Meta:
+        model = OverallResult
+        fields = [
+            'id',
+            'name',
+            'description',
+            'project',
+            'project_score',
+            'total_tokens',
+            'hallucination_accuracy',
+            'toxicity_accuracy',
+            'total_samples',
             'created_at'
         ]

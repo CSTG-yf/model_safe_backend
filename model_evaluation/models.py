@@ -40,7 +40,6 @@ class ModelEvalMetrics(models.Model):
         db_table = "model_eval_metrics"
 
 
-
 class EvaluationBatch(models.Model):
     """
     记录一次模型评估任务的结果
@@ -105,3 +104,32 @@ class EvaluationRecord(models.Model):
 
     def __str__(self):
         return f"记录 {self.record_id} (评分: {self.score})"
+
+class OverallResult(models.Model):
+    """
+    记录最终的评估结果
+    """
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=255,blank=True,null=True, help_text="模型评估结果名称")
+    description = models.TextField(blank=True, null=True, help_text="模型评估结果说明")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='overall_results')
+    project_score = models.JSONField(help_text="模型评估结果的记录")
+    total_tokens = models.IntegerField(default=0, help_text="总token数")
+    hallucination_accuracy = models.FloatField(null=True, blank=True, help_text="幻觉检测准确率")
+    toxicity_accuracy = models.FloatField(null=True, blank=True, help_text="有害内容检测准确率")
+    total_samples = models.IntegerField(default=0, help_text="总样本数")
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "模型评估结果"
+        verbose_name_plural = "模型评估结果"
+        db_table = "overall_result"
+        indexes = [
+            models.Index(fields=['id']),
+            models.Index(fields=['project_score']),
+        ]
+
+    def __str__(self):
+        return f"记录 {self.id} (模型评估结果: {self.project_score})"
+
