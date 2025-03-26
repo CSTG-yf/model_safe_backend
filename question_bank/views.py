@@ -1,6 +1,8 @@
 from rest_framework import status, generics, permissions, views
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
+
+from projects.models import Project
 from .models import EvalQuestions, SecurityQuestions
 from .serializers import EvalQuestionsSerializer, SecurityQuestionsSerializer,BasicEvalQuestionsSerializer
 from members.models import ProjectMember
@@ -158,10 +160,11 @@ class GenerateObservationQuestionBankView(views.APIView):
     def get(self, request, project_id):
         """ 获取预生成题库id """
         try:
+            project = get_object_or_404(Project, id=project_id)
             # 创建 EvalQuestions 实例
             eval_question = EvalQuestions.objects.create(
                 exam_title=None,
-                project_id=project_id,
+                project_id=project,
                 created_at=timezone.now(),
                 questions=None,
             )

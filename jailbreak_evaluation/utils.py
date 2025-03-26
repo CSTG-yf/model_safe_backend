@@ -11,6 +11,44 @@ from .consumers import ProgressConsumer
 
 #和数据库打交道
 class JailbreakService:
+    TITLE_MAPPING = {
+        # 第一类：包含违反社会主义核心价值观的内容
+        (1, 1): "煽动颠覆国家政权、推翻社会主义制度",
+        (1, 2): "危害国家安全和利益、损害国家形象",
+        (1, 3): "煽动分裂国家、破坏国家统一和社会稳定",
+        (1, 4): "宣扬恐怖主义、极端主义",
+        (1, 5): "宣扬民族仇恨",
+        (1, 6): "宣扬暴力、淫秽色情",
+        (1, 7): "传播虚假有害信息",
+        (1, 8): "其他法律、行政法规禁止的内容",
+
+        # 第二类：包含歧视性内容
+        (2, 1): "民族歧视内容",
+        (2, 2): "信仰歧视内容",
+        (2, 3): "国别歧视内容",
+        (2, 4): "地域歧视内容",
+        (2, 5): "性别歧视内容",
+        (2, 6): "年龄歧视内容",
+        (2, 7): "职业歧视内容",
+        (2, 8): "健康歧视内容",
+        (2, 9): "其他方面歧视内容",
+
+        # 第三类：商业违法违规
+        (3, 1): "侵犯他人知识产权",
+        (3, 2): "违反商业道德",
+        (3, 3): "泄露他人商业秘密",
+        (3, 4): "利用算法、数据、平台等优势，实施垄断和不正当竞争行为",
+        (3, 5): "其他商业违法违规行为",
+
+        # 第四类：侵犯他人合法权益
+        (4, 1): "危害他人身心健康",
+        (4, 2): "侵害他人肖像权",
+        (4, 3): "侵害他人名誉权",
+        (4, 4): "侵害他人荣誉权",
+        (4, 5): "侵害他人隐私权",
+        (4, 6): "侵害他人个人信息权益",
+        (4, 7): "侵犯他人其他合法权益",
+    }
     @staticmethod
     def get_all_questions():
         """获取所有 jailbreak 问题"""
@@ -60,41 +98,73 @@ class JailbreakService:
         except ObjectDoesNotExist:
             return []
 
-    # @staticmethod
-    # def save_iteration(data):
-    #     """保存迭代记录"""
-    #     try:
-    #         IterationRecord.objects.update_or_create(
-    #             category_index=data["category_index"],
-    #             title_index=data["title_index"],
-    #             prompt_num=data["prompt_num"],
-    #             cycle_num=data["current_cycle"],
-    #             score_info=data["latest_entry"]
-    #         )
-    #     except Exception as e:
-    #         print("保存迭代记录时出错:", e)
-    #         return None
-
-
-    # @staticmethod
-    # def get_all_iterations():
-    #     try:
-    #         record = list(IterationRecord.objects.all().values(
-    #         'category_index', 'title_index', 'prompt_num',
-    #         'cycle_num', 'score_info'
-    #     ))
-    #         return record
-    #     except ObjectDoesNotExist:
-    #         return []
-
-    # @staticmethod
-    # def get_iteration_history(category_index, title_index, prompt_num):
-    #     """获取迭代历史"""
-    #     return list(IterationRecord.objects.filter(
-    #         category_index=category_index,
-    #         title_index=title_index,
-    #         prompt_num=prompt_num
-    #     ).order_by('cycle_num').values('cycle_num', 'score_info'))
+    @staticmethod
+    def get_score_in_category(session_name, project_id):
+        try:
+            # 获取所有记录
+            records = ScoreRecord.objects.filter(session_name=session_name, project_id=project_id)
+            
+            # 按category_index和title_index分组
+            category_title_groups = {}
+            category_title_examples = {}
+            
+            for record in records:
+                category_index = record.category_index
+                title_index = record.title_index
+                
+                # 创建复合键，确保不同category下相同title_index被区分开
+                key = f"{category_index}_{title_index}"
+                
+                if key not in category_title_groups:
+                    category_title_groups[key] = {
+                        'category_index': category_index,
+                        'title_index': title_index,
+                        'scores': []
+                    }
+                    category_title_examples[key] = []
+                
+                category_title_groups[key]['scores'].append(record.avg_score)
+                
+                # 保存历史记录中的回答作为示例
+                if record.history:
+                    try:
+                        history = json.loads(record.history)
+                        if history and len(history) > 0:
+                            # 获取最后一条回答作为示例
+                            last_entry = history[-1]
+                            if 'answer' in last_entry:
+                                # 截取前100个字符作为示例
+                                example = last_entry['answer'][:100] + "..." if len(last_entry['answer']) > 100 else last_entry['answer']
+                                category_title_examples[key].append(example)
+                    except json.JSONDecodeError:
+                        pass
+            
+            # 计算每个category_index和title_index组合的平均分
+            result = []
+            for key, group_data in category_title_groups.items():
+                category_index = group_data['category_index']
+                title_index = group_data['title_index']
+                scores = group_data['scores']
+                
+                # 从静态字典中获取title名称
+                title_name = JailbreakService.TITLE_MAPPING.get((category_index, title_index), f"标题 {category_index}_{title_index}")
+                
+                # 计算平均分
+                avg_score = sum(scores) / len(scores) if scores else 0
+                
+                # 获取示例
+                example = category_title_examples[key][0] if category_title_examples[key] else ""
+                
+                result.append({
+                    "title": title_name,
+                    "avg_score": round(avg_score, 2),  # 保留两位小数
+                    "example": example
+                })
+            
+            return result
+        except Exception as e:
+            print(f"获取分类评分时出错: {e}")
+            return []
 
 #调用模型
 class ModelHandler:
