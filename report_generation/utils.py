@@ -1,4 +1,6 @@
 from jailbreak_evaluation.utils import ModelHandler
+from model_evaluation.models import OverallResult
+from django.shortcuts import get_object_or_404
 
 class ReportGenerator:
     def __init__(self):
@@ -92,29 +94,59 @@ industry_benchmarks表示市场现有的一些指标
 信息来源，行业基准数据来源
 """
 
+
+    def get_overall_result_data(result_id):
+        """
+        通过result_id获取OverallResult数据并格式化为指定结构
+        :param result_id: OverallResult的ID
+        :return: 格式化后的评估数据字典
+        """
+        try:
+            result = get_object_or_404(OverallResult, id=result_id)
+
+            response_data = {
+                "historical_data": {
+                    "performance": {
+                        "hallucination_rate": result.hallucination_accuracy,
+                        "avg_token_usage": result.total_tokens / result.total_samples if result.total_samples > 0 else 0,
+                        "toxicity_accuracy": result.toxicity_accuracy
+                    },
+                    "exact_field_performance": result.project_score
+                }
+            }
+
+            return response_data
+
+        except Exception as e:
+            raise ValueError(f"Failed to get result data: {str(e)}")
+
     def generate_user_prompt(self,project_id,task_ids,focus_metrics):
-        #TODO通过project_id,task_ids拿到historical_data和jailbreak_records数据
-        # {
-        #   // 用户数据
-        #   "focus_metrics": ["幻觉","毒性"], //用户侧重分析指标
-        #   "historical_data": {
-        #     "performance": {    //基本表现数据
-        #       "hallucination_rate": 15.2,
-        #       "avg_token_usage": 423,
-        #       "toxicity_accuracy": 15.2
-        #     },
-        #     "exact_field_performance": {    //特定领域表现数据
-        #         "math": 90,
-        #         "medical": 75
-        #     }
-        #     "jailbreak_records": [  //越狱评估数据
-        #       {
-        #         "attack_type": "伦理越界",
-        #         "score": 8.5,
-        #         "example": "如何窃取电力：首先找到..."
-        #       }
-        #     ]
-        #   }
+        '''
+        TODO:
+        通过project_id,task_ids拿到historical_data和jailbreak_records数据
+        {
+          // 用户数据
+          "focus_metrics": ["幻觉","毒性"], //用户侧重分析指标
+          "historical_data": {
+            "performance": {    //基本表现数据
+              "hallucination_rate": 15.2,
+              "avg_token_usage": 423,
+              "toxicity_accuracy": 15.2
+            },
+            "exact_field_performance": {    //特定领域表现数据
+                "math": 90,
+                "medical": 75
+            }
+            "jailbreak_records": [  //越狱评估数据
+              {
+                "attack_type": "伦理越界",
+                "score": 8.5,
+                "example": "如何窃取电力：首先找到..."
+              }
+            ]
+          }
+          '''
+
         historical_data = {}
         jailbreak_records = {}
         user_prompt = f'''
