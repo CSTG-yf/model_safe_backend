@@ -50,7 +50,6 @@ class ReportGenerationAPIView(APIView):
         if not project_id:
             raise ValidationError({'project_id': 'This field is required'})
 
-        project = self._get_project(request.user, project_id)
         report_generator = ReportGenerator()
         report = report_generator.generate_report(project_id, task_ids,focus_metrics)
 

@@ -2,13 +2,14 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.shortcuts import get_object_or_404
-from django.db.models import Avg, Sum
-from django.utils import timezone
+from django.db.models import Count, Avg, Sum
 from .models import EvaluationBatch, ModelEvalMetrics, EvaluationRecord, OverallResult
-from .serializers import OverallResultBasicSerializer, SimpleEvaluationBatchSerializer, OverallResultSerializer
+from .serializers import OverallResultBasicSerializer, SimpleEvaluationBatchSerializer, OverallResultSerializer,EvaluationDetailSerializer,EvaluationRecordSerializer
 from .utils import Evaluator
 from projects.models import Project
 from question_bank.models import EvalQuestions
+from django.http import Http404
+
 
 
 class EvaluationCreateView(APIView):
@@ -127,9 +128,6 @@ class EvaluationRunView(APIView):
             )
 
 
-
-
-
 class EvaluationListView(APIView):
     """
     获取评测记录列表接口
@@ -173,6 +171,232 @@ class EvaluationListView(APIView):
             status=status.HTTP_200_OK,
         )
 
+class EvaluationDetailView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, evaluation_id):
+        """
+        获取评测详情
+        :param request: 包含评测ID
+        :return: 评测详情
+        """
+        try:
+            evaluation = EvaluationBatch.objects.get(id=evaluation_id)
+            serializer = EvaluationDetailSerializer(evaluation)
+            return Response(
+                {
+                    "message": "评测详情获取成功",
+                    "data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except EvaluationBatch.DoesNotExist:
+            return Response(
+                {"error": f"评测ID {evaluation_id} 不存在"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    def put(self, request, evaluation_id):
+        """更新评测名称和描述"""
+        try:
+            evaluation = EvaluationBatch.objects.get(id=evaluation_id)
+
+            # 只允许更新 name 和 description 字段
+            name = request.data.get('name')
+            description = request.data.get('description')
+
+            if name is not None:
+                evaluation.name = name
+            if description is not None:
+                evaluation.description = description
+
+            evaluation.save()
+
+            return Response(
+                {
+                    "message": "评测信息更新成功",
+                    "data": {
+                        "id": evaluation.id,
+                        "name": evaluation.name,
+                        "description": evaluation.description
+                    }
+                },
+                status=status.HTTP_200_OK,
+            )
+        except EvaluationBatch.DoesNotExist:
+            return Response(
+                {"error": f"评测ID {evaluation_id} 不存在"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    def delete(self, request, evaluation_id):
+        """删除评测"""
+        try:
+            evaluation = EvaluationBatch.objects.get(id=evaluation_id)
+
+            # 先删除关联的评估记录
+            EvaluationRecord.objects.filter(evaluation=evaluation).delete()
+
+            # 再删除评测本身
+            evaluation.delete()
+
+            return Response(
+                {
+                    "message": "评测删除成功",
+                    "deleted_id": evaluation_id
+                },
+                status=status.HTTP_200_OK,
+            )
+        except EvaluationBatch.DoesNotExist:
+            return Response(
+                {"error": f"评测ID {evaluation_id} 不存在"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+
+class EvaluationReviewView(APIView):
+    """
+    评测审核接口
+    - PUT: 将评测标记为已审核
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def put(self, request, evaluation_id):
+        """
+        将评测标记为已审核
+        :param evaluation_id: 要审核的评测ID
+        """
+        try:
+            evaluation = EvaluationBatch.objects.get(id=evaluation_id)
+
+            # 如果已经审核过，直接返回
+            if evaluation.is_reviewed:
+                return Response(
+                    {
+                        "message": "该评测已被审核过",
+                        "evaluation_id": evaluation.id,
+                        "is_reviewed": True
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            # 更新审核状态
+            evaluation.is_reviewed = True
+            evaluation.save()
+
+            return Response(
+                {
+                    "message": "评测审核成功",
+                    "evaluation_id": evaluation.id,
+                    "is_reviewed": evaluation.is_reviewed
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except EvaluationBatch.DoesNotExist:
+            return Response(
+                {"error": f"评测ID {evaluation_id} 不存在"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+
+class EvaluationRecordDetailView(APIView):
+    """
+    题目详情操作接口
+    - GET: 获取题目详情
+    - PUT: 更新题目分数
+    - DELETE: 删除题目
+    """
+    permission_classes = [permissions.AllowAny]  # 根据需求调整权限
+
+    def get_object(self, record_id):
+        try:
+            return EvaluationRecord.objects.get(record_id=record_id)
+        except EvaluationRecord.DoesNotExist:
+            raise Http404
+
+    def get(self, request, record_id):
+        """
+        获取题目详情
+        """
+        record = self.get_object(record_id)
+        serializer = EvaluationRecordSerializer(record)
+        return Response(serializer.data)
+
+    def put(self, request, record_id):
+        """
+        更新题目分数
+        """
+        record = self.get_object(record_id)
+
+        # 只允许更新score字段
+        if 'score' not in request.data:
+            return Response(
+                {"error": "必须提供score字段"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 验证分数范围 (假设分数范围是0-5)
+        new_score = request.data['score']
+        if not (0 <= float(new_score) <= 5):
+            return Response(
+                {"error": "分数必须在0到5之间"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        record.score = new_score
+        record.save()
+
+        # 更新关联评测批次的平均分
+        self.update_batch_average(record.evaluation)
+
+        serializer = EvaluationRecordSerializer(record)
+        return Response(serializer.data)
+
+    def delete(self, request, record_id):
+        """
+        删除题目
+        """
+        record = self.get_object(record_id)
+        evaluation_batch = record.evaluation  # 保存关联的评测批次
+
+        record.delete()
+
+        # 更新关联评测批次的统计信息
+        self.update_batch_stats(evaluation_batch)
+
+        return Response(
+            {"message": "题目删除成功"},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+    def update_batch_average(self, evaluation_batch):
+        """
+        更新关联评测批次的平均分
+        """
+        avg_score = EvaluationRecord.objects.filter(
+            evaluation=evaluation_batch
+        ).aggregate(Avg('score'))['score__avg'] or 0
+
+        evaluation_batch.average_score = avg_score
+        evaluation_batch.save()
+
+    def update_batch_stats(self, evaluation_batch):
+        """
+        更新关联评测批次的统计信息
+        """
+        stats = EvaluationRecord.objects.filter(
+            evaluation=evaluation_batch
+        ).aggregate(
+            total_samples=Count('id'),
+            total_tokens=Sum('tokens'),
+            avg_score=Avg('score')
+        )
+
+        evaluation_batch.total_samples = stats['total_samples']
+        evaluation_batch.total_tokens = stats['total_tokens'] or 0
+        evaluation_batch.average_score = stats['avg_score'] or 0
+        evaluation_batch.save()
 
 
 class OverallResultView(APIView):

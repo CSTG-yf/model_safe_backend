@@ -8,14 +8,18 @@ https://docs.djangoproject.com/en/5.1/howto/deployment/asgi/
 """
 
 import os
-
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 import jailbreak_evaluation.routing
-
 import sys
-print(sys.path)  # 检查是否有重复路径
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+sys.path = [
+    str(BASE_DIR),
+    *[p for p in sys.path if Path(p).resolve() != BASE_DIR and p not in ('.', '.\\')]
+]
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ai_evaluation.settings')
 

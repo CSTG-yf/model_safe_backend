@@ -95,6 +95,7 @@ class Evaluator:
             record_id = question_dict.get("record_id") or str(uuid.uuid4())
             question = question_dict.get("question", "")
             options = question_dict.get("options", [])
+            question_type = question_dict.get("question_type", [])
             answer = question_dict.get("answer", "")
             criteria = question_dict.get("scoring_criteria", {})
             content_type = question_dict.get("content_type", "unknown")
@@ -104,6 +105,7 @@ class Evaluator:
                 "options": options,
                 "answer": answer,
                 "scoring_criteria": criteria,
+                "question_type": question_type,
             }
 
             # 构造主模型提示
