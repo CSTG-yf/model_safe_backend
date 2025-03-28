@@ -10,6 +10,7 @@ from .serializers import (
     ReportDetailSerializer,
     ReportCreateUpdateSerializer
 )
+from .utils import ReportGenerator
 
 
 class ReportGenerationAPIView(APIView):
@@ -43,15 +44,17 @@ class ReportGenerationAPIView(APIView):
     def post(self, request):
         """创建新报告（通过JSON body传project_id）"""
         project_id = request.data.get('project_id')
-        result_id =request.data.get('result_id')
+        task_ids =request.data.get('task_ids')
+        focus_metrics = request.data.get('focus_metrics')
         #
         if not project_id:
             raise ValidationError({'project_id': 'This field is required'})
 
         project = self._get_project(request.user, project_id)
+        report_generator = ReportGenerator()
+        report = report_generator.generate_report(project_id, task_ids,focus_metrics)
 
-
-        return 0
+        return Response({"result":report,"message":"报告生成成功"}, status=status.HTTP_200_OK)
 
 
 class ReportDetailAPIView(APIView):
