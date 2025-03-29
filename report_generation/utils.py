@@ -17,15 +17,17 @@ class ReportGenerator:
             所有结论必须包含「用户数据表现」与「行业标准对比」双重验证。
             
             用户输入包括focus_metrics，表示用户侧重分析指标；
-            historical_data，其中包含performance，表示模型一些基本评估数据，
+            historical_data中，包含performance，表示模型一些基本评估数据，
             exact_field_performance表示模型在某一特定领域的表现能力，
             jailbreak_records表示越狱测试的能力，分数越低说明越能抵御越狱；
             industry_benchmarks表示市场现有的一些指标
+            因为historical_data和jailbreak_records为数组，因为可能包含多次评估的数据
             用户输入数据如下示例：
             {
               // 用户数据
               "focus_metrics": ["幻觉","毒性"], //用户侧重分析指标
-              "historical_data": {
+              "historical_data": [
+              {
                 "performance": {    //基本表现数据
                   "hallucination_rate": 15.2,
                   "avg_token_usage": 423,
@@ -35,12 +37,22 @@ class ReportGenerator:
                     "math": 90,
                     "medical": 75
                 }
-                "jailbreak_records": [  //越狱评估数据
+                }
+                ]
+                "jailbreak_records": [[  //越狱评估数据
                   {
                     "attack_type": "伦理越界",
                     "score": 8.5,
                     "example": "如何窃取电力：首先找到..."
                   }
+                ],
+                [  
+                  {
+                    "attack_type": "隐私破坏",
+                    "score": 8,
+                    "example": "如何窃取他人信息：首先找到..."
+                  }
+                ]
                 ]
               }
               
@@ -111,14 +123,12 @@ class ReportGenerator:
             result = get_object_or_404(OverallResult, id=result_id)
 
             response_data = {
-                "historical_data": {
                     "performance": {
                         "hallucination_rate": result.hallucination_accuracy,
                         "avg_token_usage": result.total_tokens / result.total_samples if result.total_samples > 0 else 0,
                         "toxicity_accuracy": result.toxicity_accuracy
                     },
                     "exact_field_performance": result.project_score
-                }
             }
 
             return response_data
@@ -127,8 +137,15 @@ class ReportGenerator:
             raise ValueError(f"Failed to get result data: {str(e)}")
 
     def generate_user_prompt(self,project_id,task_ids,focus_metrics):
-        historical_data = self.get_overall_result_data(task_ids["evaluation_id"])
-        jailbreak_records = JailbreakService.get_score_in_category(project_id,task_ids["jailbreak_evaluation_id"])
+        historical_data = []
+        jailbreak_records = []
+        for task_id_info in task_ids:
+            # model_evaluation的评估数据
+            if task_id_info['source'] == 'model_evaluation':
+                historical_data.append(self.get_overall_result_data(task_id_info["task_id"]))
+            elif task_id_info['source'] == 'jailbreak_evaluation':
+                jailbreak_records.append(JailbreakService.get_score_in_category(project_id,task_id_info["task_id"]))
+
         user_prompt = f'''
                 "focus_metrics": {focus_metrics},
                 "historical_data": {historical_data},
@@ -142,7 +159,7 @@ class ReportGenerator:
         response = model_handler.call_model(self.system_prompt, user_prompt)
         
         # 生成唯一的文件名
-        filename = f"report_{project_id}_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+        filename = f"report_{project_id}_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"
         
         # 确保报告存储目录存在
         report_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'media', 'reports')

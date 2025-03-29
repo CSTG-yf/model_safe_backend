@@ -3,6 +3,10 @@ from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import ValidationError
+
+from jailbreak_evaluation.utils import JailbreakService
+from model_evaluation.models import OverallResult
+from model_evaluation.serializers import OverallResultSerializer
 from .models import Report
 from projects.models import Project
 from .serializers import (
@@ -24,6 +28,46 @@ class ReportGenerationAPIView(APIView):
             id=project_id,
             created_by=user
         )
+    # GET /api/report-generation/reports/evaluation-info/?project_id=<project_id>
+    def get_evaluation_info(self, request):
+        """获取项目的所有评估内容"""
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            raise ValidationError({'project_id': 'This parameter is required'})
+
+        project = self._get_project(request.user, project_id)
+
+        # 获取模型评估信息
+        overall_results = OverallResult.objects.filter(project=project).order_by("-created_at")
+        serializer = OverallResultSerializer(overall_results, many=True)
+        model_evaluation_overall_results = serializer.data
+        # 获取越狱评估信息
+        jailbreak_evaluation_overall_result = JailbreakService.get_all_session_by_project_id(project_id)
+
+        # 处理task_ids
+        task_ids_info = []
+
+        # 添加模型评估的task_ids
+        for result in model_evaluation_overall_results:
+            if 'id' in result:
+                task_ids_info.append({
+                    'task_id': result['task_id'],
+                    'name': result['name'],
+                    'source': 'model_evaluation',
+                })
+
+        # 添加越狱评估的task_ids
+        for result in jailbreak_evaluation_overall_result:
+            task_ids_info.append({
+                'task_id': result['task_id'],
+                'name': result['task_id'],
+                'source': 'jailbreak_evaluation'
+            })
+
+        return Response({
+            'project_id': project_id,
+            'result': task_ids_info,
+        },status=status.HTTP_200_OK)
 
     # GET /api/report-generation/reports/?project_id=<project_id>
     def get(self, request):
