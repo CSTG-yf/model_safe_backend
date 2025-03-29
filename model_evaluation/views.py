@@ -9,6 +9,7 @@ from .utils import Evaluator
 from projects.models import Project
 from question_bank.models import EvalQuestions
 from django.http import Http404
+from jailbreak_evaluation.utils import JailbreakService
 
 
 
@@ -408,23 +409,37 @@ class OverallResultView(APIView):
     def post(self, request):
         """创建新的模型评估"""
         project_id = request.data.get("project_id")
-        batch_ids = request.data.get("batch_ids", [])
+        model_evaluation_ids = request.data.get("model_evaluation_ids", [])
+        jailbreak_evaluation_ids = request.data.get("jailbreak_evaluation_ids", [])
 
-        if not project_id or not batch_ids:
+        if not project_id or (not model_evaluation_ids and not jailbreak_evaluation_ids):
             return Response(
-                {"error": "必须提供project_id和batch_ids"},
+                {"error": "必须提供project_id和至少一个评估ID列表"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
             project = Project.objects.get(id=project_id)
-            evaluations = EvaluationBatch.objects.filter(
-                project=project,
-                id__in=batch_ids
-            ).select_related('project')
 
-            if not evaluations.exists():
-                raise EvaluationBatch.DoesNotExist
+            # Handle regular model evaluations
+            model_evaluations = None
+            if model_evaluation_ids:
+                model_evaluations = EvaluationBatch.objects.filter(
+                    project=project,
+                    id__in=model_evaluation_ids
+                ).select_related('project')
+
+                if not model_evaluations.exists():
+                    raise EvaluationBatch.DoesNotExist
+
+            jailbreak_evaluation_data = []
+            if jailbreak_evaluation_ids:
+                for session_name in jailbreak_evaluation_ids:
+                    scores = JailbreakService.get_score_in_category(session_name, project_id)
+                    #TODO:出不来数据
+                    print(scores)
+                    if scores:
+                        jailbreak_evaluation_data.extend(scores)
 
         except (Project.DoesNotExist, EvaluationBatch.DoesNotExist) as e:
             return Response(
@@ -432,48 +447,60 @@ class OverallResultView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # 聚合计算
-        aggregation = evaluations.aggregate(
-            total_samples=Sum('total_samples'),
-            total_tokens=Sum('total_tokens')
-        )
+        # Initialize aggregation variables
+        aggregation = {
+            'total_samples': 0,
+            'total_tokens': 0
+        }
+        model_metrics = None
 
-        # 检查模型一致性
-        model_names = evaluations.values_list('model_name', flat=True).distinct()
-        if len(model_names) != 1:
-            return Response(
-                {"error": "批次中包含不同模型"},
-                status=status.HTTP_400_BAD_REQUEST
+        # Process regular model evaluations if they exist
+        if model_evaluations:
+            # Calculate aggregation
+            eval_agg = model_evaluations.aggregate(
+                total_samples=Sum('total_samples'),
+                total_tokens=Sum('total_tokens')
             )
+            aggregation['total_samples'] = eval_agg['total_samples'] or 0
+            aggregation['total_tokens'] = eval_agg['total_tokens'] or 0
 
-        # 获取模型指标
-        try:
-            metrics = ModelEvalMetrics.objects.get(model_name=model_names[0])
-        except ModelEvalMetrics.DoesNotExist:
-            return Response(
-                {"error": f"模型 {model_names[0]} 未配置指标"},
-                status=status.HTTP_404_NOT_FOUND
+            # Check model consistency
+            model_names = model_evaluations.values_list('model_name', flat=True).distinct()
+            if len(model_names) != 1:
+                return Response(
+                    {"error": "批次中包含不同模型"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get model metrics
+            try:
+                model_metrics = ModelEvalMetrics.objects.get(model_name=model_names[0])
+            except ModelEvalMetrics.DoesNotExist:
+                return Response(
+                    {"error": f"模型 {model_names[0]} 未配置指标"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Calculate average scores by content type
+            records = EvaluationRecord.objects.filter(
+                evaluation__in=model_evaluations
+            ).values('content_type').annotate(
+                avg_score=Avg('score')
             )
+            project_score = {record['content_type']: record['avg_score'] for record in records}
+        else:
+            project_score = {}
 
-        # 计算各内容类型平均分
-        records = EvaluationRecord.objects.filter(
-            evaluation__in=evaluations
-        ).values('content_type').annotate(
-            avg_score=Avg('score')
-        )
-
-        # 将记录转换为JSON格式
-        project_score = {record['content_type']: record['avg_score'] for record in records}
-
-        # 创建评估结果
+        # Create evaluation result
         result = OverallResult.objects.create(
             project=project,
-            total_tokens=aggregation['total_tokens'] or 0,
-            hallucination_accuracy=metrics.hallucination_accuracy,
-            toxicity_accuracy=metrics.toxicity_accuracy,
-            total_samples=aggregation['total_samples'] or 0,
+            total_tokens=aggregation['total_tokens'],
+            hallucination_accuracy=model_metrics.hallucination_accuracy if model_metrics else None,
+            toxicity_accuracy=model_metrics.toxicity_accuracy if model_metrics else None,
+            total_samples=aggregation['total_samples'],
             name=f"{project.name}的评估结果",
-            project_score=project_score  # 保存JSON数据
+            project_score=project_score,
+            jailbreak_evaluation=jailbreak_evaluation_data if jailbreak_evaluation_data else None
         )
 
         return Response(
@@ -481,7 +508,7 @@ class OverallResultView(APIView):
                 "id": result.id,
                 "name": result.name,
                 "project": project_id,
-                "created_at": result.created_at
+                "created_at": result.created_at,
             },
             status=status.HTTP_201_CREATED
         )

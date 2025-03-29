@@ -86,7 +86,9 @@ class OverallResultSerializer(serializers.ModelSerializer):
             'hallucination_accuracy',
             'toxicity_accuracy',
             'total_samples',
-            'created_at'
+            'jailbreak_evaluation',
+            'created_at',
+            'updated_at'
         ]
 class OverallResultBasicSerializer(serializers.ModelSerializer):
     class Meta:

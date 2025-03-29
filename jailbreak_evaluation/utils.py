@@ -129,7 +129,11 @@ class JailbreakService:
                 # 保存历史记录中的回答作为示例
                 if record.history:
                     try:
-                        history = json.loads(record.history)
+                        if isinstance(record.history, str):
+                            history = json.loads(record.history)
+                        else:
+                            history = record.history
+
                         if history and len(history) > 0:
                             # 获取最后一条回答作为示例
                             last_entry = history[-1]

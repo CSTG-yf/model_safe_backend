@@ -117,6 +117,8 @@ class OverallResult(models.Model):
     hallucination_accuracy = models.FloatField(null=True, blank=True, help_text="幻觉检测准确率")
     toxicity_accuracy = models.FloatField(null=True, blank=True, help_text="有害内容检测准确率")
     total_samples = models.IntegerField(default=0, help_text="总样本数")
+    jailbreak_evaluation = models.JSONField(null=True, blank=True,default=list,help_text="模型评估结果的记录"
+    )
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
