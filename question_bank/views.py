@@ -157,7 +157,7 @@ class SingleQuestionBankView(views.APIView):
 
 class GenerateObservationQuestionBankView(views.APIView):
     """ 生成观测题库（调用 AI + 安全题库）"""
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def get(self, request, project_id):
         """ 获取预生成题库id """
@@ -231,6 +231,7 @@ class QuestionDetailView(views.APIView):
             for field, value in request.data.items():
                 if field in question:
                     question[field] = value
+            question.save()
             # 更新后直接保存
             return Response({
                 "result": "success",

@@ -15,8 +15,8 @@ class JailbreakQuestion(models.Model):
 
 
 class ScoreRecord(models.Model):
-    session_id = models.CharField(max_length=255,primary_key=True)  # 会话ID(由模型名称+时间戳组成)
-    ev_id = models.TextField()  # 评估结果ID
+    session_id = models.CharField(max_length=255)  # 会话ID(由模型名称+时间戳组成)
+    ev_id = models.CharField(max_length=255)  # 评估结果ID
     project_id = models.IntegerField()
     session_name = models.TextField()
     category_index = models.IntegerField()

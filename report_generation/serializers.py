@@ -12,7 +12,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 class ReportListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
-        fields = ["id", "report_name", "created_at", "pdf_file"]
+        fields = ["id", "report_name", "created_time", "pdf_file"]
 
 
 class ReportDetailSerializer(serializers.ModelSerializer):
@@ -26,8 +26,8 @@ class ReportDetailSerializer(serializers.ModelSerializer):
 class ReportCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
-        fields = ["report_name", "report_detail"]
+        fields = ["report_name", "description"]
         extra_kwargs = {
-            "report_name": {"required": True},
-            "report_detail": {"required": False}
+            "report_name": {"required": False},
+            "description": {"required": False}
         }
