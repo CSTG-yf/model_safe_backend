@@ -156,6 +156,7 @@ AUTH_USER_MODEL = 'users.User'
 CORS_ORIGIN_WHITELIST = (
     'http://localhost:3000',
     'http://localhost:63342',
+    'http://localhost:5173',
 )
 
 SIMPLE_JWT = {

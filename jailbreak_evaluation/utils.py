@@ -1077,10 +1077,11 @@ def generate_question(state: GraphState) -> GraphState:
     try:
         model = state["params"]["model_handler"]
         if state["cycle_count"] == 0:
+            print("进入generate_first_question")
             result = model.generate_first_question(
                 state["starting_string"],
                 state["objective"],
-                mode=state["mode"]-1,
+                mode=int(state["mode"])-1,
             )
         else:
             result = model.generate_next_question(
@@ -1089,7 +1090,7 @@ def generate_question(state: GraphState) -> GraphState:
                 state["current_question"],
                 state["answer"],
                 state["score"],
-                mode=state["mode"]-1,
+                mode=int(state["mode"])-1,
             )
         
        # 确保返回的数据是可序列化的
