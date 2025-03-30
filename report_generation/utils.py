@@ -7,6 +7,7 @@ from datetime import datetime
 from fpdf import FPDF
 from report_generation.models import Report
 import uuid
+from django.core.files import File
 
 class ReportGenerator:
     def __init__(self):
@@ -175,15 +176,14 @@ class ReportGenerator:
         relative_path = os.path.join('media', 'reports', filename)
         
         # 保存报告记录到数据库
-        report = Report.objects.create(
-            project_id=project_id,
-            evaluation_task_id=task_ids.get("evaluation_id"),
-            jailbreak_task_id=task_ids.get("jailbreak_evaluation_id"),
-            focus_metrics=focus_metrics,
-            report_content=response,
-            report_file_path=relative_path
-        )
-        
+        with open(pdf_path, 'rb') as f:
+            report = Report.objects.create(
+                project_id=project_id,
+                report_detail=response,
+                pdf_file=File(f, name=filename),  # 正确方式
+                report_name=f"项目 {project_id} 评估报告"
+            )
+
         return relative_path
     
     def _save_to_pdf(self, content, file_path):
@@ -195,21 +195,40 @@ class ReportGenerator:
         """
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        
-        # 处理内容，按行分割
-        lines = content.split('\n')
-        for line in lines:
-            # 处理中文字符
-            pdf.set_font("Arial", size=12)
-            
-            # 检查是否为标题行
+
+        # 字体文件路径（假设字体文件放在 static/fonts/ 目录下）
+        font_dir = os.path.join(os.path.dirname(__file__), 'static')
+
+        # 注册常规字体和加粗字体（需要确保你确实有这些字体文件）
+        regular_font = os.path.join(font_dir, "NotoSansSC-Regular.ttf")
+        bold_font = os.path.join(font_dir, "NotoSansSC-Bold.ttf")
+
+        # 检查字体文件是否存在
+        if not os.path.exists(regular_font):
+            raise FileNotFoundError(f"常规字体文件未找到: {regular_font}")
+        if not os.path.exists(bold_font):
+            raise FileNotFoundError(f"加粗字体文件未找到: {bold_font}")
+
+        # 注册字体
+        pdf.add_font("NotoSansSC", "", regular_font, uni=True)
+        pdf.add_font("NotoSansSC", "B", bold_font, uni=True)
+
+        for line in content.split('\n'):
+            line = line.strip()
+            if not line:
+                pdf.ln(10)  # 空行处理
+                continue
+
             if line.startswith('#'):
-                pdf.set_font("Arial", 'B', size=14)
+                # 标题使用加粗和大字号
+                pdf.set_font("NotoSansSC", "B", size=14)
                 line = line.lstrip('#').strip()
-            
-            # 添加行到PDF
+            else:
+                # 正文使用常规字体
+                pdf.set_font("NotoSansSC", "", size=12)
+
             pdf.multi_cell(0, 10, line)
-        
-        # 保存PDF文件
+
+        # 确保输出目录存在
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         pdf.output(file_path)
