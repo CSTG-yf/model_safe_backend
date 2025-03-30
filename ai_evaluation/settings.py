@@ -51,7 +51,7 @@ INSTALLED_APPS = [
     "users",
     'projects',
     'members',
-
+    'celery'
 ]
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (

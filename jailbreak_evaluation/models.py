@@ -6,17 +6,20 @@ class JailbreakQuestion(models.Model):
     category_index = models.IntegerField(primary_key=True)
     title_index = models.IntegerField()
     prompt_num = models.IntegerField()
+    category = models.CharField(max_length=100)
+    title = models.CharField(max_length=100)
     prompt = models.TextField()
     starting_string = models.TextField()
 
     class Meta:
         db_table = 'new_jailbreak'
         unique_together = ('category_index', 'title_index', 'prompt_num')
+        managed = False
 
 
 class ScoreRecord(models.Model):
     session_id = models.CharField(max_length=255,primary_key=True)  # 会话ID(由模型名称+时间戳组成)
-    ev_id = models.TextField()  # 评估结果ID
+    ev_id = models.CharField(max_length=255)  # 评估结果ID
     project_id = models.IntegerField()
     session_name = models.TextField()
     category_index = models.IntegerField()
