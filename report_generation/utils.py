@@ -21,7 +21,7 @@ class ReportGenerator:
             historical_data中，包含performance，表示模型一些基本评估数据，
             exact_field_performance表示模型在某一特定领域的表现能力，
             jailbreak_records表示越狱测试的能力，分数越低说明越能抵御越狱；
-            industry_benchmarks表示市场现有的一些指标
+            industry_benchmarks表示市场现有的一些指标，如果用户没有提供，则自动查找匹配的相关指标作为对比基准
             因为historical_data和jailbreak_records为数组，因为可能包含多次评估的数据
             用户输入数据如下示例：
             {

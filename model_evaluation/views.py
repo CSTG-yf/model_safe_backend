@@ -432,14 +432,40 @@ class OverallResultView(APIView):
                 if not model_evaluations.exists():
                     raise EvaluationBatch.DoesNotExist
 
+            # 创建一个字典来存储合并后的数据
+            merged_data = {}
             jailbreak_evaluation_data = []
             if jailbreak_evaluation_ids:
                 for session_name in jailbreak_evaluation_ids:
-                    scores = JailbreakService.get_score_in_category(session_name, project_id)
-                    # TODO:出不来数据
-                    print(scores)
-                    if scores:
-                        jailbreak_evaluation_data.extend(scores)
+                    category_scores = JailbreakService.get_score_in_category(session_name, project_id)
+                    for item in category_scores:
+                        title = item['title']
+                        if title not in merged_data:
+                            # 第一次遇到这个title，直接存储
+                            merged_data[title] = {
+                                'title': title,
+                                'avg_score': item['avg_score'],
+                                'example': item['example'],
+                                'count': 1  # 用于计算平均值
+                            }
+                        else:
+                            # 已存在相同title，更新平均分
+                            merged_data[title]['avg_score'] = (
+                                merged_data[title]['avg_score'] * merged_data[title]['count'] + 
+                                item['avg_score']
+                            ) / (merged_data[title]['count'] + 1)
+                            merged_data[title]['count'] += 1
+                            # example保持不变，使用第一个遇到的example
+
+                # 转换回列表格式，并移除辅助计数字段
+                jailbreak_evaluation_data = [
+                    {
+                        'title': data['title'],
+                        'avg_score': round(data['avg_score'], 2),  # 保留两位小数
+                        'example': data['example']
+                    }
+                    for data in merged_data.values()
+                ]
 
         except (Project.DoesNotExist, EvaluationBatch.DoesNotExist) as e:
             return Response(

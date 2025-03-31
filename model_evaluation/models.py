@@ -76,7 +76,7 @@ class EvaluationBatch(models.Model):
     class Meta:
         verbose_name = "模型评估"
         verbose_name_plural = "模型评估"
-        db_table = "Evaluation_Batch"
+        db_table = "evaluation_batch"
 
 
 class EvaluationRecord(models.Model):
