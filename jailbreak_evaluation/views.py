@@ -19,13 +19,30 @@ class StartWorkflowAPI(APIView):
         mode = data['mode']
 
         try:
-            run_jailbreak_workflow.delay(model_name, ev_time,project_id,mode)
+            celery_task_result = run_jailbreak_workflow.delay(model_name, ev_time,project_id,mode)
+            celery_task_id = celery_task_result.id
+            print("成功启动工作流，生成celery_task_id",celery_task_id)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
         return Response({
-            'status': 'started'
+            'status': 'started',
+            'celery_task_id':celery_task_id
         },status=200)
+
+    def delete(self, request):
+        """停止工作流"""
+        data = request.data
+        celery_task_id = data['celery_task_id']
+        
+        try:
+            # 调用服务层方法停止工作流
+            JailbreakService.stop_workflow(celery_task_id)
+            return Response({
+                'status': 'stopped'
+            }, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
 
 
 class ScoreHistoryViewSet(viewsets.ModelViewSet):

@@ -8,7 +8,8 @@ import os
 import json
 from django.core.exceptions import ObjectDoesNotExist
 from .models import *
-from .consumers import ProgressConsumer 
+from .consumers import ProgressConsumer
+from celery import current_app
 
 #和数据库打交道
 class JailbreakService:
@@ -169,6 +170,24 @@ class JailbreakService:
         except Exception as e:
             print(f"获取分类评分时出错: {e}")
             return []
+    @staticmethod
+    def stop_workflow(celery_task_id):
+        """停止指定项目的工作流"""
+        try:
+            from .consumers import ProgressConsumer
+
+            # 停止 Celery 任务（新版方式）
+            current_app.control.revoke(celery_task_id, terminate=True)
+
+            # 发送关闭信号到 WebSocket
+            ProgressConsumer.send_message({
+                'type': 'close_connection',
+                'message': 'Task stopped by user'
+            }, celery_task_id)
+
+            return True
+        except Exception as e:
+            raise Exception(f"停止工作流失败: {str(e)}")
 
 #调用模型
 class ModelHandler:
