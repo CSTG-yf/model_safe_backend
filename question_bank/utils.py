@@ -125,7 +125,7 @@ class QuestionGenerator:
               }}
             """
 
-    def _build_prompt_without_example(self, question_num, content_type, question_type):
+    def _build_prompt_without_example(self, question_num, content_type, question_type, subfield):
         """
         构建不需要例题的提示词
 
@@ -133,14 +133,13 @@ class QuestionGenerator:
         question_num (int): 要生成的题目数量
         content_type (str): 题目领域
         question_type (str): 题目类型
-        difficulty_level (str): 难度级别，可选值: "简单", "中等", "困难"
-
+        subfield (str): 子领域
         返回:
         str: 完整的提示词
         """
         if question_type == "单选题" or question_type == "多选题":
             return f"""
-            我需要你生成{content_type}领域的{question_type}题目。每个题目都应包含题目内容、正确答案和5分制评分标准。
+            我需要你生成{content_type}领域中的和{subfield}相关的{question_type}题目。每个题目都应包含题目内容、正确答案和5分制评分标准。
     
             ## 生成要求
             - 生成 {question_num} 道新题目
@@ -239,7 +238,7 @@ class QuestionGenerator:
         """
 
     def generate_questions(self, content_type, question_type, question_num=1, temperature=None, example_question="",
-                           example_answer=""):
+                           example_answer="", subfield=""):
         """
         生成新题目
 
@@ -250,6 +249,7 @@ class QuestionGenerator:
         question_type (str): 题目类型
         question_num (int): 要生成的题目数量
         temperature (float): 生成多样性参数，0.0-1.0，如果为None则随机生成
+        subfield (str): 子领域
 
         返回:
         dict: 包含生成题目的JSON对象
@@ -261,7 +261,8 @@ class QuestionGenerator:
             prompt = self._build_prompt_without_example(
                 question_num,
                 content_type,
-                question_type
+                question_type,
+                subfield
             )
         else:
             prompt = self._build_prompt(
@@ -314,7 +315,7 @@ class QuestionGenerator:
         except Exception as e:
             return {"error": str(e)}
 
-    def _mulit_generate_questions(self, question_num, content_type, question_type):
+    def _mulit_generate_questions(self, question_num, content_type, subfield):
         """
         批量生成题目
         """
@@ -322,14 +323,18 @@ class QuestionGenerator:
         error_count = 0
         max_retries = 3
 
+        question_types = ["单选题", "多选题", "简答题", "案例分析题"]
+
         for i in range(question_num):
             retry = 0
+            question_type = random.choice(question_types)
             while retry < max_retries:
                 result = self.generate_questions(
                     content_type,
                     question_type,
                     question_num=1,
                     temperature=None,
+                    subfield=subfield
                 )
 
                 if isinstance(result, dict) and "error" not in result:
