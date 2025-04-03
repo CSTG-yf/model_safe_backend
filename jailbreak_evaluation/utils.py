@@ -84,7 +84,7 @@ class JailbreakService:
             record = ScoreRecord.objects.filter(
                 project_id=project_id
             ).values('session_name').distinct()
-            return list[record]
+            return list(record)
         except ObjectDoesNotExist:
             return []
 
