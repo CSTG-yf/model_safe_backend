@@ -1,13 +1,15 @@
 from jailbreak_evaluation.utils import ModelHandler
 from model_evaluation.models import OverallResult
 from django.shortcuts import get_object_or_404
-from jailbreak_evaluation.utils import JailbreakService
 import os
 from datetime import datetime
-from fpdf import FPDF
+import platform
+import markdown
+import pdfkit
 from report_generation.models import Report
 import uuid
 from django.core.files import File
+
 
 class ReportGenerator:
     def __init__(self):
@@ -137,98 +139,135 @@ class ReportGenerator:
         except Exception as e:
             raise ValueError(f"Failed to get result data: {str(e)}")
 
-    def generate_user_prompt(self,project_id,task_ids,focus_metrics):
-        historical_data = []
-        jailbreak_records = []
-        for task_id_info in task_ids:
-            # model_evaluation的评估数据
-            if task_id_info['source'] == 'model_evaluation':
-                historical_data.append(self.get_overall_result_data(task_id_info["task_id"]))
-            elif task_id_info['source'] == 'jailbreak_evaluation':
-                jailbreak_records.append(JailbreakService.get_score_in_category(project_id,task_id_info["task_id"]))
+    def generate_user_prompt(self, project_id, overall_id, focus_metrics):
+        """
+        基于 OverallResult 生成用户提示
 
-        user_prompt = f'''
-                "focus_metrics": {focus_metrics},
-                "historical_data": {historical_data},
-                "jailbreak_records": {jailbreak_records}
+        Args:
+            project_id: 项目ID
+            overall_id: 整体评估结果ID
+            focus_metrics: 需要重点关注的指标列表
+        """
+        try:
+            # 获取整体评估结果
+            overall_result = OverallResult.objects.get(id=overall_id, project_id=project_id)
+
+            # 构建 historical_data（模型评估数据）
+            historical_data = {
+                "performance": {
+                    "hallucination_rate": overall_result.hallucination_accuracy,
+                    "avg_token_usage": (
+                        overall_result.total_tokens / overall_result.total_samples
+                        if overall_result.total_samples > 0
+                        else 0
+                    ),
+                    "toxicity_accuracy": overall_result.toxicity_accuracy
+                },
+                "exact_field_performance": overall_result.project_score or {}
+            }
+
+            # 直接从 jailbreak_evaluation 获取越狱测试记录
+            jailbreak_records = overall_result.jailbreak_evaluation or []
+
+            # 构建最终提示词
+            user_prompt = f'''
+                    "focus_metrics": {focus_metrics},
+                    "historical_data": {historical_data},
+                    "jailbreak_records": {jailbreak_records}
                 '''
-        return user_prompt
 
-    def generate_report(self, project_id, task_ids, focus_metrics):
-        user_prompt = self.generate_user_prompt(project_id, task_ids, focus_metrics)
+            return user_prompt
+
+        except OverallResult.DoesNotExist:
+            raise ValueError(f"未找到项目 {project_id} 的整体评估结果 {overall_id}")
+        except Exception as e:
+            raise ValueError(f"生成提示词时出错: {str(e)}")
+
+    def generate_report(self, project_id, overall_id, focus_metrics):
+        """
+        生成报告方法（适配新参数结构）
+
+        Args:
+            project_id: 项目ID
+            overall_id: 整体评估任务ID
+            focus_metrics: 需要关注的指标列表
+        """
+        # 生成用户提示（修改为使用overall_id）
+        user_prompt = self.generate_user_prompt(project_id, overall_id, focus_metrics)
+
         model_handler = ModelHandler()
         response = model_handler.call_model(self.system_prompt, user_prompt)
-        
-        # 生成唯一的文件名
-        filename = f"report_{project_id}_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"
-        
+
+        # 生成唯一的文件名（包含overall_id）
+        filename = f"report_{project_id}_{overall_id}_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+
         # 确保报告存储目录存在
         report_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'media', 'reports')
         os.makedirs(report_dir, exist_ok=True)
-        
+
         # PDF文件的完整路径
         pdf_path = os.path.join(report_dir, filename)
-        
+
         # 将响应内容保存为PDF
         self._save_to_pdf(response, pdf_path)
-        
+
         # 相对路径，用于存储到数据库和返回给前端
         relative_path = os.path.join('media', 'reports', filename)
-        
+
         # 保存报告记录到数据库
         with open(pdf_path, 'rb') as f:
             report = Report.objects.create(
                 project_id=project_id,
                 report_detail=response,
-                pdf_file=File(f, name=filename),  # 正确方式
-                report_name=f"项目 {project_id} 评估报告"
+                pdf_file=File(f, name=filename),
+                report_name=f"项目 {project_id} 整体评估报告（任务ID: {overall_id}）"  # 修改报告名称
             )
 
         return relative_path
-    
+
     def _save_to_pdf(self, content, file_path):
-        """
-        将文本内容保存为PDF文件
-        
-        :param content: 要保存的文本内容
-        :param file_path: PDF文件保存路径
-        """
-        pdf = FPDF()
-        pdf.add_page()
+        try:
+            vendor_dir = os.path.join(os.path.dirname(__file__), "vendor", "wkhtmltox")
+            bin_path = os.path.join(vendor_dir, "bin", "wkhtmltopdf.exe")
 
-        # 字体文件路径（假设字体文件放在 static/fonts/ 目录下）
-        font_dir = os.path.join(os.path.dirname(__file__), 'static')
+            if not os.path.exists(bin_path):
+                raise RuntimeError(f"wkhtmltopdf.exe 未找到，请确认文件路径：{bin_path}")
 
-        # 注册常规字体和加粗字体（需要确保你确实有这些字体文件）
-        regular_font = os.path.join(font_dir, "NotoSansSC-Regular.ttf")
-        bold_font = os.path.join(font_dir, "NotoSansSC-Bold.ttf")
+            config = pdfkit.configuration(wkhtmltopdf=bin_path)
 
-        # 检查字体文件是否存在
-        if not os.path.exists(regular_font):
-            raise FileNotFoundError(f"常规字体文件未找到: {regular_font}")
-        if not os.path.exists(bold_font):
-            raise FileNotFoundError(f"加粗字体文件未找到: {bold_font}")
+            # 转换 Markdown 为 HTML
+            html_content = markdown.markdown(content)
 
-        # 注册字体
-        pdf.add_font("NotoSansSC", "", regular_font, uni=True)
-        pdf.add_font("NotoSansSC", "B", bold_font, uni=True)
+            # 添加必要的头部信息以支持图标
+            full_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <!-- 添加 Font Awesome 或其他图标库 -->
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+                <style>
+                    body {{ font-family: Arial, sans-serif; }}
+                </style>
+            </head>
+            <body>
+                {html_content}
+            </body>
+            </html>
+            """
 
-        for line in content.split('\n'):
-            line = line.strip()
-            if not line:
-                pdf.ln(10)  # 空行处理
-                continue
+            options = {
+                'encoding': 'UTF-8',
+                'enable-local-file-access': None,
+                'load-error-handling': 'ignore',  # 忽略一些加载错误
+                'load-media-error-handling': 'ignore',
+                'enable-external-links': True,  # 允许外部链接
+                'enable-internal-links': True  # 允许内部链接
+            }
 
-            if line.startswith('#'):
-                # 标题使用加粗和大字号
-                pdf.set_font("NotoSansSC", "B", size=14)
-                line = line.lstrip('#').strip()
-            else:
-                # 正文使用常规字体
-                pdf.set_font("NotoSansSC", "", size=12)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            pdfkit.from_string(full_html, file_path, options=options, configuration=config)
 
-            pdf.multi_cell(0, 10, line)
+        except Exception as e:
+            raise RuntimeError(f"PDF生成失败: {str(e)}")
 
-        # 确保输出目录存在
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        pdf.output(file_path)

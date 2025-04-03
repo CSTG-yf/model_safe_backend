@@ -438,6 +438,7 @@ class OverallResultView(APIView):
             if jailbreak_evaluation_ids:
                 for session_name in jailbreak_evaluation_ids:
                     category_scores = JailbreakService.get_score_in_category(session_name, project_id)
+                    print(category_scores)
                     for item in category_scores:
                         title = item['title']
                         if title not in merged_data:
