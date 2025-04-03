@@ -126,7 +126,7 @@ class QuestionBankUpdateDeleteView(views.APIView):
 class SecurityQuestionListView(generics.ListAPIView):
     """ 获取所有安全题库的内容 """
     serializer_class = SecurityQuestionsSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     queryset = SecurityQuestions.objects.all()
 
     def list(self, request, *args, **kwargs):
@@ -142,7 +142,7 @@ class SecurityQuestionListView(generics.ListAPIView):
 
 class SingleQuestionBankView(views.APIView):
     """ 获取单个观测题库的题目 """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def get(self, request, question_bank_id):
         """ 获取某个题库的 `questions` 字段 """
@@ -225,23 +225,49 @@ class QuestionDetailView(views.APIView):
         """
         修改单个题目的信息（部分更新）
         """
-        question = self.get_object(question_bank_id, question_id)
-        if question:
+        try:
+            # 获取题库对象
+            question_bank = EvalQuestions.objects.get(question_bank_id=question_bank_id)
+            # 获取要修改的题目
+            question = self.get_object(question_bank_id, question_id)
+
+            if not question:
+                return Response({
+                    "result": "failure",
+                    "message": "题目不存在",
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # 创建题目副本用于修改
+            updated_question = question.copy()
+
             # 只更新请求体中传递的字段
             for field, value in request.data.items():
-                if field in question:
-                    question[field] = value
-            question.save()
-            # 更新后直接保存
+                if field in updated_question:
+                    updated_question[field] = value
+
+            # 更新题库中的题目数组
+            updated_questions = []
+            for q in question_bank.questions:
+                if q['question_id'] == question_id:
+                    updated_questions.append(updated_question)
+                else:
+                    updated_questions.append(q)
+
+            # 保存更新后的题库
+            question_bank.questions = updated_questions
+            question_bank.save()
+
             return Response({
                 "result": "success",
-                "message": "Question updated successfully",
-                "question": question
+                "message": "题目更新成功",
+                "question": updated_question
             })
-        return Response({
-            "result": "failure",
-            "message": "Question not found",
-        }, status=status.HTTP_404_NOT_FOUND)
+
+        except EvalQuestions.DoesNotExist:
+            return Response({
+                "result": "failure",
+                "message": "题库不存在",
+            }, status=status.HTTP_404_NOT_FOUND)
 
     def delete(self, request, question_bank_id, question_id):
         """

@@ -1,4 +1,6 @@
 import json
+import uuid
+
 import json5
 import random
 from django.utils import timezone
@@ -107,7 +109,10 @@ def generated_questions_and_add_to_database(request, project_id):
             )
 
             # 智能数据清理函数
-            def clean_question_data(item):
+            def clean_question_data(item, existing_ids=None):
+                if existing_ids is None:
+                    existing_ids = set()
+
                 # 处理安全题库题目
                 if isinstance(item, SecurityQuestions):
                     cleaned = {
@@ -127,13 +132,11 @@ def generated_questions_and_add_to_database(request, project_id):
                             item = json.loads(item)
                         except json.JSONDecodeError:
                             item = {'question': item}
-
                     cleaned = {
                         k: (v.strip() if isinstance(v, str) else v)
                         for k, v in item.items()
                         if k not in ['id', 'created_at', 'updated_at']
                     }
-
                     # 处理嵌套JSON字段
                     for json_field in ['options', 'scoring_criteria']:
                         if json_field in cleaned:
@@ -142,17 +145,46 @@ def generated_questions_and_add_to_database(request, project_id):
                                     cleaned[json_field] = json.loads(cleaned[json_field])
                                 except:
                                     pass
-                return cleaned
+
+                # 生成唯一question_id
+                if 'question_id' not in cleaned:
+                    # 生成UUID作为question_id
+                    while True:
+                        new_id = str(uuid.uuid4())
+                        if new_id not in existing_ids:
+                            cleaned['question_id'] = new_id
+                            existing_ids.add(new_id)
+                            break
+
+                return cleaned, existing_ids
 
             # 处理所有题目数据
             cleaned_questions = []
+            existing_ids = set()
+
+            # 如果是更新已有题库，先收集已有question_id
+            if not created and eval_question.questions:
+                existing_questions = eval_question.questions
+                if isinstance(existing_questions, str):
+                    try:
+                        existing_questions = json.loads(existing_questions)
+                    except json.JSONDecodeError:
+                        existing_questions = []
+
+                if isinstance(existing_questions, list):
+                    for q in existing_questions:
+                        if isinstance(q, dict) and 'question_id' in q:
+                            existing_ids.add(q['question_id'])
+
+            # 清理并添加新题目
             for item in question_list:
                 try:
-                    cleaned = clean_question_data(item)
+                    cleaned, existing_ids = clean_question_data(item, existing_ids)
                     if cleaned:  # 确保数据有效
                         cleaned_questions.append(cleaned)
                 except Exception as e:
                     logger.error(f"清理题目数据失败: {str(e)}")
+
             # 直接赋予Python对象（JSONField会自动处理序列化）
             if created:
                 eval_question.questions = cleaned_questions
@@ -166,17 +198,17 @@ def generated_questions_and_add_to_database(request, project_id):
                         existing = json.loads(existing)
                     except json.JSONDecodeError:
                         existing = []
-
                 # 确保类型统一
                 if not isinstance(existing, list):
                     existing = [existing]
                 if not isinstance(cleaned_questions, list):
                     cleaned_questions = [cleaned_questions]
-
                 eval_question.questions = existing + cleaned_questions
-
             eval_question.save()
-
-        return Response({'status': 'success', 'message': '题库生成完成'}, status=status.HTTP_200_OK)
+        return Response({
+            'status': 'success',
+            'message': '题库生成完成',
+            'question_bank_id': question_bank_id,
+        }, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": f"存储失败: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

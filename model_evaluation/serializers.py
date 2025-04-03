@@ -51,6 +51,7 @@ class SimpleEvaluationBatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = EvaluationBatch
         fields = [
+            'id',
             'name',
             'description',
             'is_reviewed',

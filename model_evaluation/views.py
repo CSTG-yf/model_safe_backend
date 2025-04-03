@@ -141,7 +141,7 @@ class EvaluationListView(APIView):
         :param request: 包含项目ID的查询参数
         :return: 评测记录列表
         """
-        project_id = request.data.get("project_id")
+        project_id = request.query_params.get("project_id")
         if not project_id:
             return Response(
                 {"error": "缺少必要参数：project_id"},

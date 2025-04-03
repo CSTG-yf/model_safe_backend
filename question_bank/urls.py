@@ -21,5 +21,5 @@ urlpatterns = [
     path('<int:project_id>/generate/', GenerateObservationQuestionBankView.as_view(), name='generate_observation_bank'),
 
     # 获取、修改、删除单个题目
-    path('<int:question_bank_id>/question/<int:question_id>/', QuestionDetailView.as_view(), name='question_detail'),
+    path('<int:question_bank_id>/question/<str:question_id>/', QuestionDetailView.as_view(), name='question_detail'),
 ]
