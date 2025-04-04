@@ -220,10 +220,10 @@ class ReportGenerator:
                 project_id=project_id,
                 report_detail=response,
                 pdf_file=File(f, name=filename),
-                report_name=f"项目 {project_id} 整体评估报告（任务ID: {overall_id}）"  # 修改报告名称
+                report_name=f"项目 {project_id} 整体评估报告（{overall_id}）"  # 修改报告名称
             )
 
-        return relative_path
+        return relative_path,response
 
     def _save_to_pdf(self, content, file_path):
         try:

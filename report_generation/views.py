@@ -98,10 +98,12 @@ class ReportGenerationAPIView(APIView):
             raise ValidationError({'overall_id': 'This field is required'})
 
         report_generator = ReportGenerator()
-        report = report_generator.generate_report(project_id, overall_id, focus_metrics)
+        pdf_path, report_detail = report_generator.generate_report(project_id, overall_id, focus_metrics)
 
         return Response({
-            "result": report,
+            "result":"success",
+            "pdf_url": pdf_path,
+            "report_detail": report_detail,
             "message": "报告生成成功"
         }, status=status.HTTP_200_OK)
 
