@@ -1,9 +1,6 @@
 import json
 import uuid
-
-import json5
 import random
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from .models import EvalQuestions, SecurityQuestions

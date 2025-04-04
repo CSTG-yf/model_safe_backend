@@ -1,8 +1,7 @@
 import logging
 import openai
 from django.utils import timezone
-from model_evaluation.models import EvaluationBatch, EvaluationRecord
-from projects.models import Project
+from model_evaluation.models import EvaluationRecord
 from question_bank.models import EvalQuestions
 from sklearn.metrics import accuracy_score
 import pandas as pd
@@ -89,8 +88,14 @@ class Evaluator:
         :return: 评估结果元组 (record_id, prompt, response, eval_response, total_tokens)
         """
         import uuid
+        import re
 
         record_id = None
+        max_retries = 2  # 最大重试次数
+        retry_count = 0
+        final_score = None  # 初始化最终评分
+        eval_usage = None  # 初始化评估使用量
+
         try:
             record_id = question_dict.get("record_id") or str(uuid.uuid4())
             question = question_dict.get("question", "")
@@ -127,20 +132,35 @@ class Evaluator:
                 self.logger.error(f"[主模型调用失败] record_id={record_id}, model={self.model_name}")
                 return None
 
-            # 评估模型响应
-            eval_prompt = f"问题是{question}，正确答案是{answer}，回答是{response}，评定的标准是{criteria}。只需给出最后的评分，不需要讲原因。"
+            # 评估模型响应（带重试机制）
+            while retry_count <= max_retries:
+                eval_prompt = f"问题是{question}，正确答案是{answer}，回答是{response}，评定的标准是{criteria}。只需给出最后的评分数字，不需要讲原因。"
 
-            eval_response, eval_usage = self._get_response(
-                self.eval_api_key,
-                self.eval_base_url,
-                system_prompt="你是一个评分专家，请根据标准对回答进行评分",
-                user_prompt=eval_prompt,
-                model=self.eval_model_name,
-            )
+                eval_response, eval_usage = self._get_response(
+                    self.eval_api_key,
+                    self.eval_base_url,
+                    system_prompt="你是一个评分专家，请根据标准对回答进行评分",
+                    user_prompt=eval_prompt,
+                    model=self.eval_model_name,
+                )
 
-            if not eval_response or not eval_usage:
-                self.logger.error(f"[评分模型调用失败] record_id={record_id}, model={self.eval_model_name}")
-                return None
+                if not eval_response or not eval_usage:
+                    self.logger.error(f"[评分模型调用失败] record_id={record_id}, model={self.eval_model_name}")
+                    return None
+
+                # 尝试从响应中提取数字
+                score_match = re.search(r'\d+', eval_response)
+                if score_match:
+                    final_score = score_match.group()
+                    break  # 成功获取评分，跳出循环
+                else:
+                    retry_count += 1
+                    if retry_count <= max_retries:
+                        self.logger.warning(f"[评分提取失败，准备重试] record_id={record_id}, 响应内容: {eval_response}")
+                    else:
+                        self.logger.error(
+                            f"[评分提取失败，已达最大重试次数] record_id={record_id}, 最终响应内容: {eval_response}")
+                        return None
 
             # 计算总token数
             total_tokens = (getattr(usage, "total_tokens", 0) + getattr(eval_usage, "total_tokens", 0))
@@ -152,13 +172,13 @@ class Evaluator:
                 input_text=input_text,
                 output_text=response,
                 content_type=content_type,
-                score=eval_response,
+                score=final_score,
                 tokens=total_tokens,
                 created_at=timezone.now(),
                 updated_at=timezone.now(),
             )
 
-            return record_id, prompt, response, eval_response, total_tokens
+            return record_id, prompt, response, final_score, total_tokens
 
         except Exception as e:
             self.logger.exception(f"[evaluate error] record_id={record_id} | {str(e)}")

@@ -86,23 +86,31 @@ class ReportGenerationAPIView(APIView):
 
     # POST /api/report-generation/reports/
     def post(self, request):
-        """创建新报告（通过JSON body传project_id）"""
+        """创建新报告（通过JSON body传project_id和overall_id）"""
         project_id = request.data.get('project_id')
-        task_ids =request.data.get('task_ids')
+        overall_id = request.data.get('overall_id')  # 新增字段
         focus_metrics = request.data.get('focus_metrics')
-        #
+
+        # 参数校验
         if not project_id:
             raise ValidationError({'project_id': 'This field is required'})
+        if not overall_id:
+            raise ValidationError({'overall_id': 'This field is required'})
 
         report_generator = ReportGenerator()
-        report = report_generator.generate_report(project_id, task_ids,focus_metrics)
+        pdf_path, report_detail = report_generator.generate_report(project_id, overall_id, focus_metrics)
 
-        return Response({"result":report,"message":"报告生成成功"}, status=status.HTTP_200_OK)
+        return Response({
+            "result":"success",
+            "pdf_url": pdf_path,
+            "report_detail": report_detail,
+            "message": "报告生成成功"
+        }, status=status.HTTP_200_OK)
 
 
 class ReportDetailAPIView(APIView):
     """报告详情操作接口"""
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
     def _get_report(self, user, report_id):
         return get_object_or_404(

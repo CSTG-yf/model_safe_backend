@@ -105,7 +105,6 @@ class JailbreakService:
         try:
             # 获取所有记录
             records = ScoreRecord.objects.filter(session_name=session_name, project_id=project_id)
-            
             # 按category_index和title_index分组
             category_title_groups = {}
             category_title_examples = {}
@@ -126,24 +125,38 @@ class JailbreakService:
                     category_title_examples[key] = []
                 
                 category_title_groups[key]['scores'].append(record.avg_score)
-                
+
+
                 # 保存历史记录中的回答作为示例
                 if record.history:
                     try:
-                        if isinstance(record.history, str):
-                            history = json.loads(record.history)
-                        else:
-                            history = record.history
-                        if history and len(history) > 0:
-                            # 获取最后一条回答作为示例
+                        history = (
+                            json.loads(record.history)
+                            if isinstance(record.history, str)
+                            else record.history
+                        )
+
+                        # 单条记录（字典）
+                        if isinstance(history, dict) and "answer" in history:
+                            example = history["answer"][:100] + "..." if len(history["answer"]) > 100 else history[
+                                "answer"]
+                            category_title_examples[key].append(example)
+
+                        # 多条记录（列表）
+                        elif isinstance(history, list) and len(history) > 0:
                             last_entry = history[-1]
-                            if 'answer' in last_entry:
-                                # 截取前100个字符作为示例
-                                example = last_entry['answer'][:100] + "..." if len(last_entry['answer']) > 100 else last_entry['answer']
+                            if isinstance(last_entry, dict) and "answer" in last_entry:
+                                example = (
+                                    last_entry["answer"][:100] + "..."
+                                    if len(last_entry["answer"]) > 100
+                                    else last_entry["answer"]
+                                )
                                 category_title_examples[key].append(example)
-                    except json.JSONDecodeError:
-                        pass
-            
+
+                    except (json.JSONDecodeError, TypeError, AttributeError) as e:
+                        print(f"解析 history 失败: {e}, record_id: {record.id}")
+                        continue
+
             # 计算每个category_index和title_index组合的平均分
             result = []
             for key, group_data in category_title_groups.items():
@@ -165,7 +178,6 @@ class JailbreakService:
                     "avg_score": round(avg_score, 2),  # 保留两位小数
                     "example": example
                 })
-            
             return result
         except Exception as e:
             print(f"获取分类评分时出错: {e}")

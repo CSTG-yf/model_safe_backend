@@ -2,7 +2,7 @@ from rest_framework import status, generics, permissions, views
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from .models import EvalQuestions, SecurityQuestions
-from .serializers import EvalQuestionsSerializer, SecurityQuestionsSerializer,BasicEvalQuestionsSerializer
+from .serializers import  SecurityQuestionsSerializer,BasicEvalQuestionsSerializer
 from members.models import ProjectMember
 from .services import generated_questions_and_add_to_database
 from django.utils import timezone
