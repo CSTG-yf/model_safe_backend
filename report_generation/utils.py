@@ -3,7 +3,6 @@ from model_evaluation.models import OverallResult
 from django.shortcuts import get_object_or_404
 import os
 from datetime import datetime
-import platform
 import markdown
 import pdfkit
 from report_generation.models import Report
