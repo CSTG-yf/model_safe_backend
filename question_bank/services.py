@@ -15,11 +15,15 @@ url = "https://api.moonshot.cn/v1"
 myModel = "moonshot-v1-8k"
 generator = QuestionGenerator(api, url, myModel)
 
+from .consumers import QuestionBankConsumer
 
 def generated_questions_and_add_to_database(request, project_id):
     """
     AI 生成题目，并将结果存储到数据库
     """
+    # 初始化 consumer
+    consumer = QuestionBankConsumer()
+
     # 提取请求参数
     field = request.data.get("field")
     prompt = request.data.get("prompt")
@@ -35,12 +39,21 @@ def generated_questions_and_add_to_database(request, project_id):
     # 生成用户输入题库
     try:
         generated_question_list = generator._mulit_generate_questions(number, field, prompt)
-        question_list.extend(generated_question_list)
+        for i, question in enumerate(generated_question_list, start=1):
+            question_list.append(question)
+            # 发送进度更新(每10%发送一次)
+            progress = int((i / number) * 100)
+            if(progress % 10 == 0 & progress != 100):
+                logger.info(f'题目生成进度: {progress}%')
+                consumer.send_progress_update(f'题目生成进度: {progress}%',progress,"generating",project_id)
+            elif(progress == 100):
+                logger.info(f'题目生成进度: 99%')
+                consumer.send_progress_update(f'题目生成进度: 99%',99,"generating",project_id)
     except Exception as e:
         return Response({"error": f"生成题目失败: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    # 按比例随机选择安全问题
-    total_security_questions = 5
+    # 按比例随机选择安全问题（默认设置为10题）
+    total_security_questions = 10
     if security_ratios:
         try:
             # 计算总需要的安全题目数量
@@ -202,6 +215,7 @@ def generated_questions_and_add_to_database(request, project_id):
                     cleaned_questions = [cleaned_questions]
                 eval_question.questions = existing + cleaned_questions
             eval_question.save()
+        consumer.send_progress_update(f'题目生成进度: {progress}%',progress,"success",project_id)
         return Response({
             'status': 'success',
             'message': '题库生成完成',

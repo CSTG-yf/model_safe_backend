@@ -12,7 +12,8 @@ def run_jailbreak_workflow(model_name, ev_time,project_id,mode):   #后期添加
     session_name = str(project_id) + '_' + model_name + '_' + ev_time + '_' + str(mode)
     model = ModelHandler()
     workflow = JailbreakWorkflow().workflow
-    data = JailbreakService.get_all_questions()
+    # data = JailbreakService.get_all_questions()
+    data = JailbreakService.get_simple_questions()
     for item in data:
         initial_state = {
             "category_index": item["category_index"],

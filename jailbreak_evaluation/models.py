@@ -25,7 +25,7 @@ class ScoreRecord(models.Model):
     category_index = models.IntegerField()
     title_index = models.IntegerField()
     content_index = models.IntegerField()
-    avg_score = models.IntegerField()
+    avg_score = models.FloatField()
     history = models.JSONField(encoder=DjangoJSONEncoder)
 
     class Meta:

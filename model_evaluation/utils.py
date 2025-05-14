@@ -5,6 +5,7 @@ from model_evaluation.models import EvaluationRecord
 from question_bank.models import EvalQuestions
 from sklearn.metrics import accuracy_score
 import pandas as pd
+from .consumers import EvaluationConsumer
 
 from phoenix.evals import (
     TOXICITY_PROMPT_RAILS_MAP,
@@ -190,21 +191,23 @@ class Evaluator:
         :param evaluation_batch: 评估批次对象
         :return: 更新后的评估批次对象
         """
+        consumer = EvaluationConsumer()
         try:
             # 获取题库问题
             eval_question = EvalQuestions.objects.get(pk=self.question_bank_id)
             questions = eval_question.questions
             total_samples = len(questions)
-
+    
             # 初始化统计数据
             total_tokens = 0
             total_score = 0.0
             completed = 0
-
+            last_reported_progress = 0
+    
             for question in questions:
                 # 执行单次评估
                 result = self.evaluate(question, evaluation_batch)
-
+    
                 if result:
                     total_tokens += result[4] if len(result) > 4 else 0
                     try:
@@ -212,16 +215,38 @@ class Evaluator:
                     except (ValueError, TypeError):
                         pass
                     completed += 1
-
+    
+                    # 计算当前进度
+                    progress = int((completed / total_samples) * 100)
+                    # 每10%发送一次进度
+                    if (progress >= last_reported_progress + 10 & prpgress < 100):
+                        event = {
+                            "type": "send_progress",
+                            "message": f"评估进度: {progress}%",
+                            "progress": progress,
+                            "tag": "evaluating",
+                        }
+                        consumer.send_message(evaluation_batch, event)
+                        last_reported_progress = progress
+                    elif(progress == 100):
+                        event = {
+                            "type": "send_progress",
+                            "message": f"评估进度: {progress}%",
+                            "progress": progress,
+                            "tag": "success",
+                        }
+                        consumer.send_message(evaluation_batch, event)
+                        last_reported_progress = progress
+    
             # 更新评估批次数据
             evaluation_batch.total_samples = completed
             evaluation_batch.total_tokens = total_tokens
             if completed > 0:
                 evaluation_batch.average_score = total_score / completed
             evaluation_batch.save()
-
+    
             return evaluation_batch
-
+    
         except Exception as e:
             raise Exception(f"批量评估过程中发生错误: {str(e)}")
 
