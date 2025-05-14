@@ -45,10 +45,10 @@ def generated_questions_and_add_to_database(request, project_id):
             progress = int((i / number) * 100)
             if(progress % 10 == 0 & progress != 100):
                 logger.info(f'题目生成进度: {progress}%')
-                consumer.send_progress_update(f'题目生成进度: {progress}%',progress,"generating",project_id)
+                consumer.send_message(f'题目生成进度: {progress}%',progress,"generating",project_id)
             elif(progress == 100):
                 logger.info(f'题目生成进度: 99%')
-                consumer.send_progress_update(f'题目生成进度: 99%',99,"generating",project_id)
+                consumer.send_message(f'题目生成进度: 99%',99,"generating",project_id)
     except Exception as e:
         return Response({"error": f"生成题目失败: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

@@ -18,7 +18,7 @@ class QuestionBankConsumer(AsyncWebsocketConsumer):
         print("self.project_id为:", self.project_id)
         self.group_name = f'{self.project_id}'
         
-        if self.project_id in ProgressConsumer.active_connections:
+        if self.project_id in QuestionBankConsumer.active_connections:
             print("该任务已经有一个活跃连接")
             await self.close()
             return
@@ -31,7 +31,7 @@ class QuestionBankConsumer(AsyncWebsocketConsumer):
         )
         
         # 存储连接实例
-        ProgressConsumer.active_connections[self.project_id] = self
+        QuestionBankConsumer.active_connections[self.project_id] = self
         
         # 接受WebSocket连接
         await self.accept()
@@ -45,8 +45,8 @@ class QuestionBankConsumer(AsyncWebsocketConsumer):
         )
         
         # 移除存储的连接实例
-        if self.project_id in ProgressConsumer.active_connections:
-            del ProgressConsumer.active_connections[self.project_id]
+        if self.project_id in QuestionBankConsumer.active_connections:
+            del QuestionBankConsumer.active_connections[self.project_id]
     
     async def receive(self, text_data):
         """接收前端发送的消息"""
