@@ -15,6 +15,9 @@ import jailbreak_evaluation.routing
 import sys
 from pathlib import Path
 
+import model_evaluation.routing
+import question_bank.routing
+
 BASE_DIR = Path(__file__).resolve().parent
 sys.path = [
     str(BASE_DIR),
@@ -27,7 +30,9 @@ application = ProtocolTypeRouter({
     "http": get_asgi_application(),
     "websocket": AuthMiddlewareStack(
         URLRouter(
-            jailbreak_evaluation.routing.websocket_urlpatterns
+            jailbreak_evaluation.routing.websocket_urlpatterns +
+            question_bank.routing.websocket_urlpatterns +
+            model_evaluation.routing.websocket_urlpatterns
         )
     ),
 })

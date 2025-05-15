@@ -215,7 +215,7 @@ def generated_questions_and_add_to_database(request, project_id):
                     cleaned_questions = [cleaned_questions]
                 eval_question.questions = existing + cleaned_questions
             eval_question.save()
-        consumer.send_progress_update(f'题目生成进度: {progress}%',progress,"success",project_id)
+        consumer.send_message(f'题目生成进度: {progress}%',progress,"success",project_id)
         return Response({
             'status': 'success',
             'message': '题库生成完成',
