@@ -35,17 +35,48 @@ class EvaluationConsumer(AsyncWebsocketConsumer):
         # 移除存储的连接实例
         if self.evaluation_batch in EvaluationConsumer.active_connections:
             del EvaluationConsumer.active_connections[self.evaluation_batch]
+    
+    async def send_progress(self, event):
+        """
+        处理并发送进度消息到WebSocket客户端
+        
+        Args:
+            event: 包含消息内容的事件字典
+        """
+        # 从事件中提取数据
+        message = event.get('message', '')
+        progress = event.get('progress', 0)
+        tag = event.get('tag', '')
+        
+        # 发送消息到WebSocket
+        await self.send(text_data=json.dumps({
+            'message': message,
+            'progress': progress,
+            'tag': tag
+        }))
 
-    async def send_message(self,evaluation_batch, event):
+    @classmethod
+    def send_message(cls, message, progress, tag, evaluation_batch=0):
+        """
+        同步方法，用于从其他地方发送消息到WebSocket
+        
+        Args:
+            message: 要发送的消息内容
+            progress: 进度值
+            tag: 消息标签
+            evaluation_batch: 评估批次ID，用于标识发送目标
+        """
         channel_layer = get_channel_layer()
         group_name = f'evaluation_{evaluation_batch}'
+        
+        # 使用async_to_sync将异步调用转换为同步调用
         async_to_sync(channel_layer.group_send)(
             group_name,
             {
                 'type': 'send_progress',
-                'message': event['message'],
-                'progress': event['progress'],
-                'tag': event['tag'],
+                'message': message,
+                'progress': progress,
+                'tag': tag
             }
         )
         

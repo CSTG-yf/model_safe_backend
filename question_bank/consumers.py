@@ -52,6 +52,25 @@ class QuestionBankConsumer(AsyncWebsocketConsumer):
         """接收前端发送的消息"""
         # 解析接收到的JSON数据
         data = json.loads(text_data)
+    
+    async def send_progress(self, event):
+        """
+        处理并发送进度消息到WebSocket客户端
+        
+        Args:
+            event: 包含消息内容的事件字典
+        """
+        # 从事件中提取数据
+        message = event.get('message', '')
+        progress = event.get('progress', 0)
+        tag = event.get('tag', '')
+        
+        # 发送消息到WebSocket
+        await self.send(text_data=json.dumps({
+            'message': message,
+            'progress': progress,
+            'tag': tag
+        }))
         
     @classmethod
     def send_message(cls, message, progress, tag, project_id=0):
