@@ -219,7 +219,7 @@ class Evaluator:
                     # 计算当前进度
                     progress = int((completed / total_samples) * 100)
                     # 每10%发送一次进度
-                    if (progress >= last_reported_progress + 10 & prpgress < 100):
+                    if (progress >= last_reported_progress + 10 & progress < 100):
                         event = {
                             "type": "send_progress",
                             "message": f"评估进度: {progress}%",
