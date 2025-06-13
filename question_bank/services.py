@@ -8,6 +8,8 @@ from django.forms.models import model_to_dict
 from .utils import QuestionGenerator
 from django.db import transaction
 import logging
+from django.core.cache import cache
+
 logger = logging.getLogger(__name__)
 
 api = "sk-hhAm1szWdX0riU29nSrmrHrtAFOUKcQuG4jE4mEFSQwqLuWS"
@@ -16,6 +18,20 @@ myModel = "moonshot-v1-8k"
 generator = QuestionGenerator(api, url, myModel)
 
 from .consumers import QuestionBankConsumer
+
+def update_generation_progress(project_id,question_bank_id, progress, message="正在生成题库", state="generating"):
+    """
+    更新题库生成进度并存入缓存
+    """
+    cache_key = f"question_bank_progress_{project_id}_{question_bank_id}"
+    progress_data = {
+        'progress': progress,
+        'message': message,
+        'state': state
+    }
+    # 设置缓存，过期时间为1小时
+    cache.set(cache_key, progress_data, timeout=3600)
+    return progress_data
 
 def generated_questions_and_add_to_database(request, project_id):
     """
@@ -35,6 +51,10 @@ def generated_questions_and_add_to_database(request, project_id):
         return Response({"error": "请提供 prompt"}, status=status.HTTP_400_BAD_REQUEST)
     if not question_bank_id:
         return Response({"error": "请提供 question_bank_id"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # 初始化进度为0%
+    update_generation_progress(project_id,question_bank_id, 0, "开始生成题库", "generating")
+    
     question_list = []
     # 生成用户输入题库
     try:
@@ -43,13 +63,15 @@ def generated_questions_and_add_to_database(request, project_id):
             question_list.append(question)
             # 发送进度更新(每10%发送一次)
             progress = int((i / number) * 100)
-            if(progress % 10 == 0 & progress != 100):
+            if progress % 10 == 0 and progress != 100:
                 logger.info(f'题目生成进度: {progress}%')
-                consumer.send_message(f'题目生成进度: {progress}%',progress,"generating",project_id)
-            elif(progress == 100):
+                update_generation_progress(project_id,question_bank_id, progress, f"题目生成进度: {progress}%", "generating")
+            elif progress == 100:
                 logger.info(f'题目生成进度: 99%')
-                consumer.send_message(f'题目生成进度: 99%',99,"generating",project_id)
+                update_generation_progress(project_id,question_bank_id, 99, "题目生成进度: 99%", "generating")
     except Exception as e:
+        # 更新缓存中的进度为失败状态
+        update_generation_progress(project_id,question_bank_id, 0, f"生成题目失败: {str(e)}", "failed")
         return Response({"error": f"生成题目失败: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     # 按比例随机选择安全问题（默认设置为10题）
@@ -109,7 +131,10 @@ def generated_questions_and_add_to_database(request, project_id):
 
     # 检查是否有有效题目
     if not question_list:
+        # 更新缓存中的进度为失败状态
+        update_generation_progress(project_id,question_bank_id, 0, "无有效题目", "failed")
         return Response({'status': 'error', 'message': '无有效题目'}, status=status.HTTP_400_BAD_REQUEST)
+    
     # 存储题目到数据库
     try:
         with transaction.atomic():
@@ -215,11 +240,72 @@ def generated_questions_and_add_to_database(request, project_id):
                     cleaned_questions = [cleaned_questions]
                 eval_question.questions = existing + cleaned_questions
             eval_question.save()
-        consumer.send_message(f'题目生成进度: {progress}%',progress,"success",project_id)
+        update_generation_progress(project_id,question_bank_id, 100, "题库生成完成", "completed")
         return Response({
             'status': 'success',
             'message': '题库生成完成',
             'question_bank_id': question_bank_id,
         }, status=status.HTTP_200_OK)
     except Exception as e:
+        # 更新缓存中的进度为失败状态
+        update_generation_progress(question_bank_id, 0, f"存储失败: {str(e)}", "failed")
         return Response({"error": f"存储失败: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+def get_question_generation_progress(request,project_id):
+    """
+    获取题库生成进度
+    """
+    # 获取请求参数
+    question_bank_id = request.query_params.get('question_bank_id')
+    
+    # 参数校验
+    if not question_bank_id:
+        return Response({"error": "请提供 question_bank_id"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # 构建缓存键
+        cache_key = f"question_bank_progress_{project_id}_{question_bank_id}"
+        
+        # 获取进度信息
+        progress_data = cache.get(cache_key)
+        
+        if progress_data is None:
+            # 如果没有找到进度信息，可能是已经完成或尚未开始
+            # 检查题库是否存在
+            try:
+                eval_question = EvalQuestions.objects.get(question_bank_id=question_bank_id)
+                # 如果题库存在且有题目，则认为已完成
+                if eval_question.questions and len(eval_question.questions) > 0:
+                    return Response({
+                        'status': 'success',
+                        'progress': 100,
+                        'message': '题库生成已完成',
+                        'state': 'completed'
+                    }, status=status.HTTP_200_OK)
+                else:
+                    return Response({
+                        'status': 'info',
+                        'progress': 0,
+                        'message': '题库生成尚未开始或进度信息不可用',
+                        'state': 'not_started'
+                    }, status=status.HTTP_200_OK)
+            except EvalQuestions.DoesNotExist:
+                return Response({
+                    'status': 'error',
+                    'message': '题库不存在',
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        # 返回进度信息
+        return Response({
+            'status': 'success',
+            'progress': progress_data.get('progress', 0),
+            'message': progress_data.get('message', '正在生成题库'),
+            'state': progress_data.get('state', 'generating')
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"获取题库生成进度失败: {str(e)}")
+        return Response({
+            'status': 'error',
+            'message': f'获取进度信息失败: {str(e)}',
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -1,185 +1,79 @@
-# from typing import Dict, List, Optional
-# import logging
-# from question_bank.models import EvalQuestions
-# from .utils import run_full_evaluation, Evaluator
-# from .models import ModelEvalMetrics, EvaluationBatch, EvaluationRecord
-#
-# logger = logging.getLogger(__name__)
-#
-# class ModelEvaluationService:
-#     @staticmethod
-#     def trigger_evaluation(
-#         model_config: Dict[str, str],
-#         eval_model_config: Dict[str, str],
-#         question_bank_id: int,
-#         sample_size: int = 100
-#     ) -> Dict:
-#         """
-#         触发模型评估，包括问题评估、幻觉评估和毒性评估
-#
-#         Args:
-#             model_config: 待评估模型的配置
-#                 - name: 模型名称
-#                 - api_key: API密钥
-#                 - base_url: API基础URL
-#             eval_model_config: 评估模型的配置（用于评分）
-#                 - name: 模型名称
-#                 - api_key: API密钥
-#                 - base_url: API基础URL
-#             question_bank_id: 要评估的题库ID
-#             sample_size: 幻觉和毒性评估的样本数量
-#
-#         Returns:
-#             Dict: 包含评估状态和批次ID的字典
-#         """
-#         try:
-#             required_fields = ['name', 'api_key', 'base_url']
-#             for config in [model_config, eval_model_config]:
-#                 for field in required_fields:
-#                     if field not in config:
-#                         raise ValueError(f"Missing required field: {field}")
-#
-#             try:
-#                 eval_questions = EvalQuestions.objects.get(question_bank_id=question_bank_id)
-#             except EvalQuestions.DoesNotExist:
-#                 raise ValueError(f"Question bank with ID {question_bank_id} not found")
-#
-#             batch = EvaluationBatch.objects.create(
-#                 name=f"Comprehensive Evaluation {model_config['name']}",
-#                 model_name=model_config['name'],
-#                 question_bank_id=str(question_bank_id)
-#             )
-#
-#             questions = []
-#             for q in eval_questions.questions:
-#                 question_data = [
-#                     str(q.get('question_id', '')),  # record_id
-#                     q.get('source', ''),            # source
-#                     q.get('content_type', ''),      # content_type
-#                     q.get('question_type', ''),     # question_type
-#                     q.get('question', ''),          # question
-#                     q.get('options', []),           # options
-#                     q.get('answer', ''),            # answer
-#                     q.get('scoring_criteria', '')   # scoring_criteria
-#                 ]
-#                 questions.append(question_data)
-#
-#             evaluator = Evaluator(
-#                 api_key=model_config['api_key'],
-#                 base_url=model_config['base_url'],
-#                 model_name=model_config['name'],
-#                 eval_api_key=eval_model_config['api_key'],
-#                 eval_base_url=eval_model_config['base_url'],
-#                 eval_model_name=eval_model_config['name'],
-#                 question_bank_id=question_bank_id
-#             )
-#             evaluator.evaluate_multiple(questions)
-#
-#             run_full_evaluation(
-#                 api_key=model_config['api_key'],
-#                 base_url=model_config['base_url'],
-#                 model_name=model_config['name'],
-#                 sample_size=sample_size
-#             )
-#
-#             return {
-#                 'status': 'success',
-#                 'batch_id': batch.id,
-#                 'message': 'Evaluation started successfully'
-#             }
-#
-#         except Exception as e:
-#             logger.error(f"Error triggering evaluation: {str(e)}")
-#             return {
-#                 'status': 'error',
-#                 'message': f"Failed to start evaluation: {str(e)}"
-#             }
-#
-#     @staticmethod
-#     def get_evaluation_summary(batch_id: int) -> Dict:
-#         """
-#         获取评估的总数据，包括问题评估统计和幻觉毒性评估结果
-#
-#         Args:
-#             batch_id: 评估批次ID
-#
-#         Returns:
-#             Dict: 包含评估总数据的字典
-#         """
-#         try:
-#             batch = EvaluationBatch.objects.get(id=batch_id)
-#
-#             hallucination_toxicity = ModelEvaluationHALUCINATION_TOXICITY.objects.get(
-#                 model_name=batch.model_name
-#             )
-#
-#             eval_questions = EvalQuestions.objects.get(question_bank_id=batch.question_bank_id)
-#
-#             return {
-#                 'status': 'success',
-#                 'batch_id': batch_id,
-#                 'model_name': batch.model_name,
-#                 'question_bank_id': batch.question_bank_id,
-#                 'question_bank_title': eval_questions.exam_title,
-#                 'question_evaluation': {
-#                     'total_questions': batch.total_records,
-#                     'average_score': batch.average_score,
-#                     'total_tokens': batch.total_tokens
-#                 },
-#                 'hallucination_evaluation': {
-#                     'accuracy': hallucination_toxicity.hallucination_accuracy
-#                 },
-#                 'toxicity_evaluation': {
-#                     'accuracy': hallucination_toxicity.toxicity_accuracy
-#                 }
-#             }
-#
-#         except Exception as e:
-#             logger.error(f"Error getting evaluation summary: {str(e)}")
-#             return {
-#                 'status': 'error',
-#                 'message': f"Failed to get evaluation summary: {str(e)}"
-#             }
-#
-#     @staticmethod
-#     def get_evaluation_details(batch_id: int) -> Dict:
-#         """
-#         获取评估的详细结果，包括每个问题的具体评估记录
-#
-#         Args:
-#             batch_id: 评估批次ID
-#
-#         Returns:
-#             Dict: 包含详细评估记录的字典
-#         """
-#         try:
-#             batch = EvaluationBatch.objects.get(id=batch_id)
-#
-#             records = EvaluationRecord.objects.filter(question_bank_id=batch.question_bank_id)
-#
-#             details = []
-#             for record in records:
-#                 details.append({
-#                     'record_id': record.record_id,
-#                     'input': record.input,
-#                     'output': record.output,
-#                     'score': record.score,
-#                     'tokens': record.tokens,
-#                     'created_at': record.created_at
-#                 })
-#
-#             return {
-#                 'status': 'success',
-#                 'batch_id': batch_id,
-#                 'total_records': len(details),
-#                 'details': details
-#             }
-#
-#         except Exception as e:
-#             logger.error(f"Error getting evaluation details: {str(e)}")
-#             return {
-#                 'status': 'error',
-#                 'message': f"Failed to get evaluation details: {str(e)}"
-#             }
-#
-#
+from rest_framework import status
+from rest_framework.response import Response
+from django.core.cache import cache
+from .models import EvaluationBatch
+
+def update_evaluation_progress(project_id,evaluation_id, progress, message="正在生成题库", state="generating"):
+    """
+    更新题库生成进度并存入缓存
+    """
+    cache_key = f"evaluation_progress_{project_id}_{evaluation_id}"
+    progress_data = {
+        'progress': progress,
+        'message': message,
+        'state': state
+    }
+    # 设置缓存，过期时间为1小时
+    cache.set(cache_key, progress_data, timeout=3600)
+    return progress_data
+
+def get_evaluation_progress(request,project_id):
+    """
+    获取评估进度
+    """
+    # 获取请求参数
+    evaluation_id = request.query_params.get('evaluation_id')
+    
+    # 参数校验
+    if not evaluation_id:
+        return Response({"error": "请提供 evaluation_id"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # 构建缓存键
+        cache_key = f"evaluation_progress_{project_id}_{evaluation_id}"
+        
+        # 获取进度信息
+        progress_data = cache.get(cache_key)
+        
+        if progress_data is None:
+            # 如果没有找到进度信息，可能是已经完成或尚未开始
+            # 检查评估是否存在
+            try:
+                evaluation = EvaluationBatch.objects.get(id=evaluation_id)
+                # 如果评估存在且有结果，则认为已完成
+                if evaluation.total_samples > 0:
+                    return Response({
+                        'status': 'success',
+                        'progress': 100,
+                        'message': '评估已完成',
+                        'state': 'completed',
+                    }, status=status.HTTP_200_OK)
+                else:
+                    return Response({
+                        'status': 'info',
+                        'progress': 0,
+                        'message': '评估尚未开始或进度信息不可用',
+                        'state': 'not_started'
+                    }, status=status.HTTP_200_OK)
+            except EvaluationBatch.DoesNotExist:
+                return Response({
+                    'status': 'error',
+                    'message': '评估不存在',
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        # 返回进度信息
+        return Response({
+            'status': 'success',
+            'progress': progress_data.get('progress', 0),
+            'message': progress_data.get('message', '正在评估'),
+            'state': progress_data.get('state', 'evaluating')
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"获取评估进度失败: {str(e)}")
+        return Response({
+            'status': 'error',
+            'message': f'获取进度信息失败: {str(e)}',
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

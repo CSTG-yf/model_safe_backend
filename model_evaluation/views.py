@@ -11,6 +11,7 @@ from projects.models import Project
 from question_bank.models import EvalQuestions
 from django.http import Http404
 from jailbreak_evaluation.utils import JailbreakService
+from .services import get_evaluation_progress,update_evaluation_progress
 
 
 class EvaluationCreateView(APIView):
@@ -621,3 +622,14 @@ class OverallResultListView(APIView):
             },
             status=status.HTTP_200_OK
         )
+
+
+class EvaluationProgressView(APIView):
+    """
+    获取评估进度的视图
+    """
+    def post(self, request, project_id):
+        """
+        处理GET请求，获取评估进度
+        """
+        return get_evaluation_progress(request,project_id)

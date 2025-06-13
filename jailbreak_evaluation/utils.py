@@ -60,6 +60,34 @@ class JailbreakService:
         ))
 
     @staticmethod
+    def get_prompt_by_params(category_index, title_index, prompt_num):
+        """
+        通过 category_index, title_index, prompt_num 三个参数返回对应的 prompt
+        
+        Args:
+            category_index (int): 类别索引
+            title_index (int): 标题索引
+            prompt_num (int): prompt 编号
+            
+        Returns:
+            dict: 包含 prompt 和 starting_string 的字典，如果未找到则返回 None
+        """
+        try:
+            # 查询符合条件的问题
+            question = JailbreakQuestion.objects.filter(
+                category_index=category_index,
+                title_index=title_index,
+                prompt_num=prompt_num
+            ).first()
+            
+            if question:
+                return question.prompt
+            else:
+                return None
+        except Exception as e:
+            print(f"获取 prompt 时出错: {e}")
+            return None
+    @staticmethod
     def get_simple_questions():
         """获取所有 jailbreak 问题"""
         return list(JailbreakQuestion.objects.filter(prompt_num = 1).values(
@@ -1206,6 +1234,7 @@ def update_history(state: GraphState) -> GraphState:
                 "title_index": int(state.get("title_index", 0)),
                 "prompt_num": int(state.get("prompt_num", 0)),
                 "current_cycle": int(state.get("cycle_count", 0)) + 1,
+                "initial_question": JailbreakService.get_prompt_by_params(state.get("category_index", 0), state.get("title_index", 0), state.get("prompt_num", 0)),
                 "latest_entry": new_entry
             }
         }

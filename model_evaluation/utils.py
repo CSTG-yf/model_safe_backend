@@ -204,6 +204,9 @@ class Evaluator:
             completed = 0
             last_reported_progress = 0
     
+            # 初始化进度
+            update_evaluation_progress(self.project_id, evaluation_batch.id, 0, "正在评估题库", "evaluating")
+
             for question in questions:
                 # 执行单次评估
                 result = self.evaluate(question, evaluation_batch)
@@ -218,26 +221,7 @@ class Evaluator:
     
                     # 计算当前进度
                     progress = int((completed / total_samples) * 100)
-                    # 每10%发送一次进度
-                    if (progress >= last_reported_progress + 10 & progress < 100):
-                        event = {
-                            "type": "send_progress",
-                            "message": f"评估进度: {progress}%",
-                            "progress": progress,
-                            "tag": "evaluating",
-                        }
-                        consumer.send_message(evaluation_batch, event)
-                        last_reported_progress = progress
-                    elif(progress == 100):
-                        event = {
-                            "type": "send_progress",
-                            "message": f"评估进度: {progress}%",
-                            "progress": progress,
-                            "tag": "success",
-                        }
-                        consumer.send_message(evaluation_batch, event)
-                        last_reported_progress = progress
-    
+                    update_evaluation_progress(self.project_id, evaluation_batch.id, progress, "正在评估题库", "evaluating")
             # 更新评估批次数据
             evaluation_batch.total_samples = completed
             evaluation_batch.total_tokens = total_tokens

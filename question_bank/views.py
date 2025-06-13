@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404
 from .models import EvalQuestions, SecurityQuestions
 from .serializers import  SecurityQuestionsSerializer,BasicEvalQuestionsSerializer
 from members.models import ProjectMember
-from .services import generated_questions_and_add_to_database
+from .services import generated_questions_and_add_to_database,get_question_generation_progress
 from django.utils import timezone
 from projects.models import Project
 import logging
@@ -287,3 +287,13 @@ class QuestionDetailView(views.APIView):
             "result": "failure",
             "message": "Question not found",
         }, status=status.HTTP_404_NOT_FOUND)
+
+class QuestionGenerationProgressView(APIView):
+    """
+    获取题库生成进度的视图
+    """
+    def post(self, request,project_id):
+        """
+        处理GET请求，获取题库生成进度
+        """
+        return get_question_generation_progress(request,project_id)

@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import EvaluationCreateView, EvaluationRunView, EvaluationListView, OverallResultView, \
-    OverallResultListView, EvaluationDetailView, EvaluationReviewView, EvaluationRecordDetailView
+    OverallResultListView, EvaluationDetailView, EvaluationReviewView, EvaluationRecordDetailView,EvaluationProgressView
 
 urlpatterns = [
     # 创建评测记录
@@ -30,4 +30,5 @@ urlpatterns = [
     # 更新评估结果名称 (PUT /overall-result/<pk>/)
     path("overall-result/<int:pk>/", OverallResultView.as_view(), name="overall-result-detail"),
 
+    path('<int:project_id>/progress/', EvaluationProgressView.as_view(), name='evaluation_progress'),
 ]
