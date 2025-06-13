@@ -288,7 +288,7 @@ class QuestionDetailView(views.APIView):
             "message": "Question not found",
         }, status=status.HTTP_404_NOT_FOUND)
 
-class QuestionGenerationProgressView(APIView):
+class QuestionGenerationProgressView(views.APIView):
     """
     获取题库生成进度的视图
     """
