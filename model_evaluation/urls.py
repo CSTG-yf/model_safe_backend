@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import EvaluationCreateView, EvaluationRunView, EvaluationListView, OverallResultView, \
-    OverallResultListView, EvaluationDetailView, EvaluationReviewView, EvaluationRecordDetailView,EvaluationProgressView
+    OverallResultListView, EvaluationDetailView, EvaluationReviewView, EvaluationRecordDetailView, \
+    EvaluationProgressView, CancelModelEvaluationView
 
 urlpatterns = [
     # 创建评测记录
@@ -31,4 +32,7 @@ urlpatterns = [
     path("overall-result/<int:pk>/", OverallResultView.as_view(), name="overall-result-detail"),
 
     path('<int:project_id>/progress/', EvaluationProgressView.as_view(), name='evaluation_progress'),
+
+# 取消题库生成
+    path('<int:project_id>/cancel/', CancelModelEvaluationView.as_view(), name='cancel_model_evaluation'),
 ]

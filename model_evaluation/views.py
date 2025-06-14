@@ -11,7 +11,7 @@ from projects.models import Project
 from question_bank.models import EvalQuestions
 from django.http import Http404
 from jailbreak_evaluation.utils import JailbreakService
-from .services import get_evaluation_progress,update_evaluation_progress
+from .services import get_evaluation_progress, check_user_cancelled, cancel_model_evaluation
 
 
 class EvaluationCreateView(APIView):
@@ -113,6 +113,13 @@ class EvaluationRunView(APIView):
                 model_name=evaluation_batch.model_name,
                 sample_size=int(data.get("sample_size", 100)),
             )
+
+            cancelled, save_evaluation,evaluation_name = check_user_cancelled(evaluation_batch.project.id, evaluation_id)
+            if cancelled and not save_evaluation:
+                return Response(
+                    {"message": "用户取消评估"},
+                    status=status.HTTP_200_OK,
+                )
 
             # Step 2: 执行题库评估
             evaluator.evaluate_multiple(evaluation_batch)
@@ -633,3 +640,15 @@ class EvaluationProgressView(APIView):
         处理GET请求，获取评估进度
         """
         return get_evaluation_progress(request,project_id)
+
+class CancelModelEvaluationView(APIView):
+    """
+    取消题库生成过程的视图
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, project_id):
+        """
+        处理POST请求，取消题库生成过程
+        """
+        return cancel_model_evaluation(request, project_id)

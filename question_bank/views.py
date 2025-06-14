@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404
 from .models import EvalQuestions, SecurityQuestions
 from .serializers import  SecurityQuestionsSerializer,BasicEvalQuestionsSerializer
 from members.models import ProjectMember
-from .services import generated_questions_and_add_to_database,get_question_generation_progress
+from .services import generated_questions_and_add_to_database,get_question_generation_progress,cancel_question_generation
 from django.utils import timezone
 from projects.models import Project
 import logging
@@ -297,3 +297,16 @@ class QuestionGenerationProgressView(views.APIView):
         处理GET请求，获取题库生成进度
         """
         return get_question_generation_progress(request,project_id)
+
+
+class CancelQuestionGenerationView(views.APIView):
+    """
+    取消题库生成过程的视图
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, project_id):
+        """
+        处理POST请求，取消题库生成过程
+        """
+        return cancel_question_generation(request, project_id)

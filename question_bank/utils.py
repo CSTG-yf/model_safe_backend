@@ -2,6 +2,7 @@ import openai
 import json5
 import demjson3
 import random
+from .services import check_user_cancelled,update_generation_progress
 
 class QuestionGenerator:
     def __init__(self, api_key, base_url, model):
@@ -311,7 +312,7 @@ class QuestionGenerator:
         except Exception as e:
             return {"error": str(e)}
 
-    def _mulit_generate_questions(self, question_num, content_type, subfield):
+    def _mulit_generate_questions(self, question_num, content_type, subfield,project_id,question_bank_id ):
         """
         批量生成题目
         """
@@ -339,6 +340,18 @@ class QuestionGenerator:
                         question_list.extend(result)
                     else:
                         question_list.append(result)
+                        # 调用进度回调函数
+
+                    #更新进度并检查是否取消
+                    progress = int((i+1 / question_num) * 100)
+                    if progress < 100:  # 保留最后的100%给整体完成时
+                        update_generation_progress(project_id, question_bank_id, progress, f"题目生成进度: {progress}%", "generating")
+                        
+                        # 检查用户是否取消了操作
+                        cancelled, save_questions,bank_name = check_user_cancelled(project_id, question_bank_id)
+                        if cancelled and not save_questions:
+                            # 抛出异常来中断生成过程
+                            raise Exception("用户取消生成题库")
                     break
                 else:
                     retry += 1

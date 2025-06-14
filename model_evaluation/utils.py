@@ -5,7 +5,7 @@ from model_evaluation.models import EvaluationRecord
 from question_bank.models import EvalQuestions
 from sklearn.metrics import accuracy_score
 import pandas as pd
-from .consumers import EvaluationConsumer
+from .services import update_evaluation_progress,check_user_cancelled
 
 from phoenix.evals import (
     TOXICITY_PROMPT_RAILS_MAP,
@@ -191,7 +191,6 @@ class Evaluator:
         :param evaluation_batch: 评估批次对象
         :return: 更新后的评估批次对象
         """
-        consumer = EvaluationConsumer()
         try:
             # 获取题库问题
             eval_question = EvalQuestions.objects.get(pk=self.question_bank_id)
@@ -222,11 +221,20 @@ class Evaluator:
                     # 计算当前进度
                     progress = int((completed / total_samples) * 100)
                     update_evaluation_progress(self.project_id, evaluation_batch.id, progress, "正在评估题库", "evaluating")
+
+                # 检查用户是否取消了操作
+                cancelled, save_evaluation,evaluation_name = check_user_cancelled(self.project_id, evaluation_batch.id)
+                if cancelled and not save_evaluation:
+                    # 抛出异常来中断生成过程
+                    raise Exception("用户取消模型测试")
+
+            _, _, evaluation_name = check_user_cancelled(self.project_id, evaluation_batch.id)
             # 更新评估批次数据
             evaluation_batch.total_samples = completed
             evaluation_batch.total_tokens = total_tokens
             if completed > 0:
                 evaluation_batch.average_score = total_score / completed
+            evaluation_batch.name = evaluation_name
             evaluation_batch.save()
     
             return evaluation_batch

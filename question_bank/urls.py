@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     SearchQuestionBankView, QuestionBankUpdateDeleteView,
     SecurityQuestionListView, SingleQuestionBankView, GenerateObservationQuestionBankView,QuestionDetailView,
-    QuestionGenerationProgressView 
+    QuestionGenerationProgressView ,CancelQuestionGenerationView
 )
 
 urlpatterns = [
@@ -26,4 +26,7 @@ urlpatterns = [
     
     # 获取题库生成进度
     path('<int:project_id>/progress/', QuestionGenerationProgressView.as_view(), name='question_generation_progress'),
+    
+    # 取消题库生成
+    path('<int:project_id>/cancel/', CancelQuestionGenerationView.as_view(), name='cancel_question_generation'),
 ]

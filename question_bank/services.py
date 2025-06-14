@@ -17,7 +17,14 @@ url = "https://api.moonshot.cn/v1"
 myModel = "moonshot-v1-8k"
 generator = QuestionGenerator(api, url, myModel)
 
-from .consumers import QuestionBankConsumer
+def check_user_cancelled(project_id,question_bank_id):
+    cache_key = f"question_bank_cancel_{project_id}_{question_bank_id}"
+    cancelled = cache.get(cache_key)
+    if cancelled:
+        is_save = cancelled.get("save_questions", False)
+        bank_name = cancelled.get("bank_name", False)
+        return True, is_save, bank_name
+    return False, None
 
 def update_generation_progress(project_id,question_bank_id, progress, message="正在生成题库", state="generating"):
     """
@@ -37,8 +44,6 @@ def generated_questions_and_add_to_database(request, project_id):
     """
     AI 生成题目，并将结果存储到数据库
     """
-    # 初始化 consumer
-    consumer = QuestionBankConsumer()
 
     # 提取请求参数
     field = request.data.get("field")
@@ -46,6 +51,7 @@ def generated_questions_and_add_to_database(request, project_id):
     number = request.data.get("number", 10)  # 默认生成10道题
     security_ratios = request.data.get("security_ratio", [])  # 默认空列表
     question_bank_id = request.data.get("question_bank_id")
+    
     # 参数校验
     if not prompt:
         return Response({"error": "请提供 prompt"}, status=status.HTTP_400_BAD_REQUEST)
@@ -53,29 +59,57 @@ def generated_questions_and_add_to_database(request, project_id):
         return Response({"error": "请提供 question_bank_id"}, status=status.HTTP_400_BAD_REQUEST)
     
     # 初始化进度为0%
-    update_generation_progress(project_id,question_bank_id, 0, "开始生成题库", "generating")
+    update_generation_progress(project_id, question_bank_id, 0, "开始生成题库", "generating")
     
     question_list = []
     # 生成用户输入题库
     try:
-        generated_question_list = generator._mulit_generate_questions(number, field, prompt)
-        for i, question in enumerate(generated_question_list, start=1):
-            question_list.append(question)
-            # 发送进度更新(每10%发送一次)
-            progress = int((i / number) * 100)
-            if progress % 10 == 0 and progress != 100:
-                logger.info(f'题目生成进度: {progress}%')
-                update_generation_progress(project_id,question_bank_id, progress, f"题目生成进度: {progress}%", "generating")
-            elif progress == 100:
-                logger.info(f'题目生成进度: 99%')
-                update_generation_progress(project_id,question_bank_id, 99, "题目生成进度: 99%", "generating")
+        # 传入回调函数，在生成每个问题后更新进度
+        generated_question_list = generator._mulit_generate_questions(number, field, prompt,project_id, question_bank_id)
+        
+        # 检查用户是否在生成题目后取消了操作
+        cancelled, save_questions = check_user_cancelled(project_id,question_bank_id)
+        if cancelled:
+            if not save_questions:
+                # 用户取消且不保存
+                update_generation_progress(project_id, question_bank_id, 0, "用户取消生成题库", "cancelled")
+                return Response({
+                    "status": "success",
+                    "message": "用户取消保存题库",
+                }, status=status.HTTP_200_OK)
+            # 如果用户选择保存，则继续处理已生成的题目
+        
+        # 将生成的题目添加到列表中
+        question_list.extend(generated_question_list)
+        
+        # 设置进度为99%，表示题目生成完成，但整个过程还未完成
+        logger.info('题目生成进度: 99%')
+        update_generation_progress(project_id, question_bank_id, 99, "题目生成进度: 99%", "generating")
     except Exception as e:
-        # 更新缓存中的进度为失败状态
-        update_generation_progress(project_id,question_bank_id, 0, f"生成题目失败: {str(e)}", "failed")
-        return Response({"error": f"生成题目失败: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        if str(e) == "用户取消生成题库":
+            # 用户取消生成
+            update_generation_progress(project_id, question_bank_id, 0, "用户取消生成题库", "cancelled")
+            return Response({
+                "status": "success",
+                "message": "用户取消保存题库",
+            }, status=status.HTTP_200_OK)
+        else:
+            # 其他错误
+            update_generation_progress(project_id, question_bank_id, 0, f"生成题目失败: {str(e)}", "failed")
+            return Response({"error": f"生成题目失败: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     # 按比例随机选择安全问题（默认设置为10题）
     total_security_questions = 10
+    
+    # 再次检查用户是否取消了操作
+    cancelled, save_questions, bank_name = check_user_cancelled(project_id,question_bank_id)
+    if cancelled and not save_questions:
+        update_generation_progress(project_id, question_bank_id, 0, "用户取消生成题库", "cancelled")
+        return Response({
+            "status": "success",
+            "message": "用户取消保存题库",
+        }, status=status.HTTP_200_OK)
+    
     if security_ratios:
         try:
             # 计算总需要的安全题目数量
@@ -239,6 +273,7 @@ def generated_questions_and_add_to_database(request, project_id):
                 if not isinstance(cleaned_questions, list):
                     cleaned_questions = [cleaned_questions]
                 eval_question.questions = existing + cleaned_questions
+                eval_question.exam_title = bank_name
             eval_question.save()
         update_generation_progress(project_id,question_bank_id, 100, "题库生成完成", "completed")
         return Response({
@@ -309,3 +344,31 @@ def get_question_generation_progress(request,project_id):
             'status': 'error',
             'message': f'获取进度信息失败: {str(e)}',
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def cancel_question_generation(request, project_id):
+    """
+    取消题库生成过程
+    """
+    question_bank_id = request.data.get("question_bank_id")
+    save_questions = request.data.get("save_questions", False)
+    bank_name = request.data.get("bank_name", "Noname")
+    
+    if not question_bank_id:
+        return Response({"error": "请提供 question_bank_id"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # 设置取消标记
+    cache_key = f"question_bank_cancel_{project_id}_{question_bank_id}"
+    cache.set(cache_key, {"save_questions": save_questions,"bank_name":bank_name}, timeout=3600)
+    
+    # 更新进度状态
+    if save_questions:
+        update_generation_progress(project_id, question_bank_id, 99, "用户请求保存当前题库", "saving")
+    else:
+        update_generation_progress(project_id, question_bank_id, 0, "用户取消生成题库", "cancelled")
+    
+    return Response({
+        "status": "success",
+        "message": "已发送取消请求",
+        "save_questions": save_questions
+    }, status=status.HTTP_200_OK)
