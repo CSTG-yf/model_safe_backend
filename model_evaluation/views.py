@@ -6,7 +6,7 @@ from django.db.models import Count, Avg, Sum
 from .models import EvaluationBatch, ModelEvalMetrics, EvaluationRecord, OverallResult
 from .serializers import OverallResultBasicSerializer, SimpleEvaluationBatchSerializer, OverallResultSerializer, \
     EvaluationDetailSerializer, EvaluationRecordSerializer
-from .utils import Evaluator
+from .services import Evaluator
 from projects.models import Project
 from question_bank.models import EvalQuestions
 from django.http import Http404
