@@ -387,7 +387,7 @@ def check_user_cancelled(project_id,question_bank_id):
     cancelled = cache.get(cache_key)
     if cancelled:
         is_save = cancelled.get("save_questions", False)
-        bank_name = cancelled.get("bank_name", False)
+        bank_name = cancelled.get("bank_name", "Noname")
         return True, is_save, bank_name
     return False, None, None
 
@@ -618,6 +618,10 @@ def generated_questions_and_add_to_database(request, project_id):
                         cleaned_questions.append(cleaned)
                 except Exception as e:
                     logger.error(f"清理题目数据失败: {str(e)}")
+
+            # 确保 bank_name 有默认值
+            if not bank_name:
+                bank_name = f"{field}_题库"
 
             # 直接赋予Python对象（JSONField会自动处理序列化）
             if created:

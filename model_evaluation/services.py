@@ -231,13 +231,17 @@ class Evaluator:
                     # 抛出异常来中断生成过程
                     raise Exception("用户取消模型测试")
 
+            # 获取评估名称，如果没有则使用默认名称
             _, _, evaluation_name = check_user_cancelled(self.project_id, evaluation_batch.id)
+            if not evaluation_name:
+                evaluation_name = f"评估批次-{evaluation_batch.id}"
+
             # 更新评估批次数据
             evaluation_batch.total_samples = completed
             evaluation_batch.total_tokens = total_tokens
+            evaluation_batch.name = evaluation_name  # 确保name字段有值
             if completed > 0:
                 evaluation_batch.average_score = total_score / completed
-            evaluation_batch.name = evaluation_name
             evaluation_batch.save()
 
             return evaluation_batch
@@ -468,6 +472,6 @@ def check_user_cancelled(project_id,evaluation_id):
     cancelled = cache.get(cache_key)
     if cancelled:
         is_save = cancelled.get("save_evaluation", False)
-        evaluation_name = cancelled.get("evaluation_name", False)
+        evaluation_name = cancelled.get("evaluation_name", "Noname")
         return True, is_save,evaluation_name
     return False, None ,None
