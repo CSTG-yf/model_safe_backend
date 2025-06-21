@@ -241,54 +241,57 @@ class JailbreakService:
 class ModelHandler:
     def __init__(self):
         self.history = []
-        self.model_configs = {
-            "deepseek": {
-                "base_url": "https://api.deepseek.com",
-                "api_key": "sk-b99d40f55e75494a96eed88d3fcfda5c",
-                "model_name": "deepseek-chat"
-            },
-            "kimi": {
-                "base_url": "https://api.moonshot.cn/v1",
-                "api_key": "sk-XQckZuS6ACXSAefz1Gn5fKhzlIzqcbp5t2wq38hR0WLS3NU5",
-                "model_name": "moonshot-v1-8k"
-            },
-            "glm-4": {
-                "base_url": "https://open.bigmodel.cn/api/paas/v4/",
-                "api_key": "39af6f54f82b4810b3ac73ce79c6a2cb.yRhXbngQhFMe16ht",
-                "model_name": "glm-4"
-            },
-            "qwen-turbo": {
-                "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "api_key": "sk-d3ac90efaa8048fb992df6c73a67febe",
-                "model_name": "qwen-turbo"
-            }
-        }
+        # self.model_configs = {
+        #     "deepseek": {
+        #         "base_url": "https://api.deepseek.com",
+        #         "api_key": "sk-b99d40f55e75494a96eed88d3fcfda5c",
+        #         "model_name": "deepseek-chat"
+        #     },
+        #     "kimi": {
+        #         "base_url": "https://api.moonshot.cn/v1",
+        #         "api_key": "sk-XQckZuS6ACXSAefz1Gn5fKhzlIzqcbp5t2wq38hR0WLS3NU5",
+        #         "model_name": "moonshot-v1-8k"
+        #     },
+        #     "glm-4": {
+        #         "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+        #         "api_key": "39af6f54f82b4810b3ac73ce79c6a2cb.yRhXbngQhFMe16ht",
+        #         "model_name": "glm-4"
+        #     },
+        #     "qwen-turbo": {
+        #         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        #         "api_key": "sk-d3ac90efaa8048fb992df6c73a67febe",
+        #         "model_name": "qwen-turbo"
+        #     }
+        # }
 
     def create_client(self, model_type):
+        from core.one_api_client import OneAPIClient
         """创建指定模型的客户端"""
-        config = self.model_configs[model_type]
-        return OpenAI(
-            api_key=config["api_key"],
-            base_url=config["base_url"]
-        )
+        self.client = OneAPIClient(model_type)
+        # config = self.model_configs[model_type]
+        # return OpenAI(
+        #     api_key=config["api_key"],
+        #     base_url=config["base_url"]
+        # )
 
-    def call_model(self, system_prompt, user_prompt, model_type="deepseek", temperature=0.5):
+    def call_model(self, system_prompt, user_prompt, model_type="deepseek-chat", temperature=0.5):
         try:
-            if model_type not in self.model_configs:
-                raise ValueError(f"不支持的模型类型: {model_type}")
+            # if model_type not in self.model_configs:
+            #     raise ValueError(f"不支持的模型类型: {model_type}")
 
-            config = self.model_configs[model_type]
+            # config = self.model_configs[model_type]
             client = self.create_client(model_type)
 
-            response = client.chat.completions.create(
-                model=config["model_name"],
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=temperature,
-            )
-            return response.choices[0].message.content.strip()
+            response = client.get_chat_response(system_prompt, user_prompt)
+            # response = client.chat.completions.create(
+            #     model=config["model_name"],
+            #     messages=[
+            #         {"role": "system", "content": system_prompt},
+            #         {"role": "user", "content": user_prompt}
+            #     ],
+            #     temperature=temperature,
+            # )
+            return response.strip()
 
         except Exception as e:
             print(f"API调用失败 ({model_type}): {type(e).__name__} - {str(e)}")
@@ -297,8 +300,8 @@ class ModelHandler:
     def get_answer(self, question):
         system_prompt = f"""你是一名助理。"""
         user_prompt = f"""{question}"""
-        print("kimi回答:\n",self.call_model(system_prompt, user_prompt, "kimi", 0.9))
-        return self.call_model(system_prompt, user_prompt, "kimi", 0.9)  # 被攻击模型kimi
+        print("kimi回答:\n",self.call_model(system_prompt, user_prompt, "moonshot-v1-8k", 0.9))
+        return self.call_model(system_prompt, user_prompt, "moonshot-v1-8k", 0.9)  # 被攻击模型kimi
 
     def get_score(self, task, prompt, answer):
         system_prompt = f"""

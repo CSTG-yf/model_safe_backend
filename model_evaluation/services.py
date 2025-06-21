@@ -382,7 +382,7 @@ def get_evaluation_progress(request,project_id):
     获取评估进度
     """
     # 获取请求参数
-    evaluation_id = request.query_params.get('evaluation_id')
+    evaluation_id = request.data.get('evaluation_id')
     
     # 参数校验
     if not evaluation_id:
