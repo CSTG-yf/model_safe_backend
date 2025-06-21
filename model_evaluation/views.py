@@ -50,8 +50,8 @@ class EvaluationCreateView(APIView):
         # 创建评测记录
         evaluation_batch = EvaluationBatch.objects.create(
             project=project,
-            model_name=data.get("model_name", project.ai_model_name),
-            evaluator_model_name=data.get("evaluation_model_name", "deepseek-chat"),
+            model_name=data.get("model_name", project.ai_model_name),#被测主模型
+            evaluator_model_name=data.get("evaluation_model_name", "deepseek-chat"),#判题模型
             name=data.get("evaluation_name", "未命名评估"),
             description=data.get("evaluation_description", ""),
         )
@@ -91,27 +91,18 @@ class EvaluationRunView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # 固定API配置
-        DEFAULT_API_KEY = "sk-hhAm1szWdX0riU29nSrmrHrtAFOUKcQuG4jE4mEFSQwqLuWS"
-        DEFAULT_BASE_URL = "https://api.moonshot.cn/v1"
-
         try:
             # 初始化评估器
             evaluator = Evaluator(
-                api_key=DEFAULT_API_KEY,
-                base_url=DEFAULT_BASE_URL,
                 model_name=evaluation_batch.model_name,
-                project_id=evaluation_batch.project.id,
-                question_bank_id=question_bank.question_bank_id,  # 使用传入的题库ID
                 eval_model_name=evaluation_batch.evaluator_model_name,
+                project_id=evaluation_batch.project.id,
+                question_bank_id=question_bank.question_bank_id,
             )
 
             # Step 1: 执行基础指标评估（幻觉和毒性检测）
             evaluator.run_full_evaluation(
-                api_key=DEFAULT_API_KEY,
-                base_url=DEFAULT_BASE_URL,
-                model_name=evaluation_batch.model_name,
-                sample_size=int(data.get("sample_size", 100)),
+                sample_size=int(data.get("sample_size", 100))
             )
 
             cancelled, save_evaluation,evaluation_name = check_user_cancelled(evaluation_batch.project.id, evaluation_id)

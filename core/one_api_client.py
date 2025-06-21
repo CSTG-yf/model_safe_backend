@@ -3,6 +3,7 @@
 import os
 from openai import OpenAI
 import json
+from typing import Tuple, Any
 
 def get_available_models() -> list[str]:
 
@@ -58,3 +59,22 @@ class OneAPIClient:
         except Exception as e:
             print(f"Error calling model '{self.model}': {e}")
             raise
+
+    def get_chat_response_with_usage(self, system_prompt: str, prompt: str, **kwargs) -> Tuple[str, Any]:
+        """
+        这个新方法会同时返回响应内容和token用量(usage)对象。
+        它不会影响到调用 get_chat_response 的旧代码。
+        """
+        params = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+            **kwargs
+        }
+        try:
+            completion = self.client.chat.completions.create(**params)
+            # 同时返回响应内容和usage信息
+            return completion.choices[0].message.content, completion.usage
+        except Exception as e:
+            print(f"Error calling model '{self.model}': {e}")
+            # 发生错误时返回 None, None 以便上层处理
+            return None, None
