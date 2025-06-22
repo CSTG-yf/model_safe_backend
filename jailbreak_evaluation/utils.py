@@ -267,7 +267,8 @@ class ModelHandler:
     def create_client(self, model_type):
         from core.one_api_client import OneAPIClient
         """创建指定模型的客户端"""
-        self.client = OneAPIClient(model_type)
+        one_api_client = OneAPIClient(model_type)
+        return one_api_client
         # config = self.model_configs[model_type]
         # return OpenAI(
         #     api_key=config["api_key"],
@@ -721,7 +722,7 @@ class ModelHandler:
         """
 
         try:
-            response = self.call_model(system_prompt[mode], user_prompt, "deepseek", temperature=0.8)
+            response = self.call_model(system_prompt[mode], user_prompt, "deepseek-chat", temperature=0.8)
             result = extract_prompt(response)
             return result
         except Exception as e:
@@ -1089,7 +1090,7 @@ class ModelHandler:
         user_prompt = f"""使用上述方法创建越狱提示，严格按照要求输出，不要输出多余字符"""
 
         try:
-            response = self.call_model(system_prompt[mode], user_prompt, "deepseek", temperature=0.8)
+            response = self.call_model(system_prompt[mode], user_prompt, "deepseek-chat", temperature=0.8)
             result = extract_prompt(response)
             return result
         except Exception as e:

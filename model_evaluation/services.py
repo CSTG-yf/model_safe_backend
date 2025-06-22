@@ -222,6 +222,7 @@ class Evaluator:
 
                     # 计算当前进度
                     progress = int((completed / total_samples) * 100)
+                    print(f"当前进度:{progress}%")
                     update_evaluation_progress(self.project_id, evaluation_batch.id, progress, "正在评估题库",
                                                "evaluating")
 
