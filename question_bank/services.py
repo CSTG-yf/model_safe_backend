@@ -7,29 +7,24 @@ from django.forms.models import model_to_dict
 from django.db import transaction
 import logging
 from django.core.cache import cache
-import openai
 import json5
 import demjson3
 import random
+from core.one_api_client import OneAPIClient
 
 
 class QuestionGenerator:
-    def __init__(self, api_key, base_url, model):
+
+    def __init__(self, model: str):
         """
-        初始化题目生成器
+        初始化题目生成器。
+        这个类现在使用 OneAPIClient 来处理AI调用。
 
         参数:
-        api_key (str): API密钥
-        base_url (str): API基础URL
-        model (str): 使用的AI模型名称
+        model (str): 要使用的AI模型名称, e.g., "qwen-max"
         """
-        self.api_key = api_key
-        self.base_url = base_url
         self.model = model
-        self.client = openai.OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url
-        )
+        self.one_api_client = OneAPIClient(model=self.model)
 
     def _build_prompt(self, example_question, example_answer, question_num, content_type, question_type):
         """
@@ -282,17 +277,13 @@ class QuestionGenerator:
         system_prompt = self._build_system_prompt()
 
         try:
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
+
+            response = self.one_api_client.get_chat_response(
+                system_prompt=system_prompt,
+                prompt=prompt,
                 temperature=temperature,
                 response_format={"type": "json_object"}
             )
-
-            response = completion.choices[0].message.content
 
             # 新版清洗逻辑（仅处理Markdown代码块）
             json_str = response.strip()
@@ -377,11 +368,6 @@ class QuestionGenerator:
 
 logger = logging.getLogger(__name__)
 
-api = "sk-hhAm1szWdX0riU29nSrmrHrtAFOUKcQuG4jE4mEFSQwqLuWS"
-url = "https://api.moonshot.cn/v1"
-myModel = "moonshot-v1-8k"
-generator = QuestionGenerator(api, url, myModel)
-
 def check_user_cancelled(project_id,question_bank_id):
     cache_key = f"question_bank_cancel_{project_id}_{question_bank_id}"
     cancelled = cache.get(cache_key)
@@ -416,6 +402,7 @@ def generated_questions_and_add_to_database(request, project_id):
     number = request.data.get("number", 10)  # 默认生成10道题
     security_ratios = request.data.get("security_ratio", [])  # 默认空列表
     question_bank_id = request.data.get("question_bank_id")
+    model_name = request.data.get("model_name", "moonshot-v1-8k")
     
     # 参数校验
     if not prompt:
@@ -429,6 +416,7 @@ def generated_questions_and_add_to_database(request, project_id):
     question_list = []
     # 生成用户输入题库
     try:
+        generator = QuestionGenerator(model=model_name)
         # 传入回调函数，在生成每个问题后更新进度
         generated_question_list = generator._mulit_generate_questions(number, field, prompt,project_id, question_bank_id)
         
