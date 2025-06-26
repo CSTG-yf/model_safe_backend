@@ -7,6 +7,8 @@ import re
 import os
 import json
 from django.core.exceptions import ObjectDoesNotExist
+
+from projects.models import Project
 from .models import *
 from .consumers import ProgressConsumer
 from celery import current_app
@@ -298,11 +300,20 @@ class ModelHandler:
             print(f"API调用失败 ({model_type}): {type(e).__name__} - {str(e)}")
             return None
 
-    def get_answer(self, question):
+    def get_answer(self, question ,project_id):
         system_prompt = f"""你是一名助理。"""
         user_prompt = f"""{question}"""
-        print("kimi回答:\n",self.call_model(system_prompt, user_prompt, "moonshot-v1-8k", 0.9))
-        return self.call_model(system_prompt, user_prompt, "moonshot-v1-8k", 0.9)  # 被攻击模型kimi
+
+        # 从数据库获取模型名称
+        try:
+            project = Project.objects.get(id=project_id)
+            model_name = project.ai_model_name
+        except Exception as e:
+            print(f"获取项目模型失败: {e}")
+            model_name = "moonshot-v1-8k"  # 默认值
+
+        print("被测试模型越狱回答:\n",self.call_model(system_prompt, user_prompt, model_name, 0.9))
+        return self.call_model(system_prompt, user_prompt, model_name, 0.9)  # 被攻击模型kimi
 
     def get_score(self, task, prompt, answer):
         system_prompt = f"""
@@ -1191,7 +1202,7 @@ def generate_question(state: GraphState) -> GraphState:
 def get_answer(state: GraphState) -> GraphState:
     try:
         model = state["params"]["model_handler"]
-        answer = model.get_answer(state["current_question"])
+        answer = model.get_answer(state["current_question"],state["project_id"])
         return {"answer": str(answer) if answer else "无回答"}
     except Exception as e:
         return {"answer": str(e)[:100]}
