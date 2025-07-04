@@ -1215,7 +1215,9 @@ def update_history(state: GraphState) -> GraphState:
 
         try:
             task_id = str(state.get('session_name', ''))
+            tag = str(int(state.get("category_index", 0))) + '_' + str(int(state.get("title_index", 0))) + '_' +str(int(state.get("prompt_num", 0))) + '_' + str(int(state.get("cycle_count", 0)) + 1)
             ProgressConsumer.send_message(message, task_id)
+            print(f"WebSocket消息已发送: {tag}")
         except Exception as ws_error:
             print(f"WebSocket发送消息失败: {str(ws_error)}")
 

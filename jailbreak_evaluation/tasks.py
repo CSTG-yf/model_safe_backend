@@ -32,7 +32,7 @@ def process_item(item, session_id, session_name, project_id, mode):
             initial_state.update(step)
             
     except Exception as e:
-        print(f"处理项目失败: {e}")
+        print(f"处理项目{item['category_index']}-{item['title_index']}-{item['prompt_num']}失败: {e}")
 
 @shared_task
 def run_jailbreak_workflow(model_name, ev_time, project_id, mode):
@@ -42,8 +42,8 @@ def run_jailbreak_workflow(model_name, ev_time, project_id, mode):
     session_name = str(project_id) + '_' + model_name + '_' + ev_time + '_' + str(mode)
     data = JailbreakService.get_simple_questions()
     
-    # 根据Key数量设置最大线程数
-    with ThreadPoolExecutor(max_workers= 5) as executor:
+    # 使用线程池并发处理每个item
+    with ThreadPoolExecutor(max_workers=min(2, len(data))) as executor:  # 最多4个线程或数据项数量
         futures = []
         for item in data:
             futures.append(executor.submit(
@@ -51,5 +51,9 @@ def run_jailbreak_workflow(model_name, ev_time, project_id, mode):
                 item, session_id, session_name, project_id, mode
             ))
         
+        # 等待所有任务完成
         for future in futures:
-            future.result()
+            try:
+                future.result()  # 获取结果，如有异常会抛出
+            except Exception as e:
+                print(f"任务执行出错: {e}")
