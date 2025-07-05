@@ -9,6 +9,7 @@ from question_bank.models import EvalQuestions
 from sklearn.metrics import accuracy_score
 import pandas as pd
 from core.one_api_client import OneAPIClient
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from phoenix.evals import (
     TOXICITY_PROMPT_RAILS_MAP,
@@ -154,55 +155,60 @@ class Evaluator:
         :return: 更新后的评估批次对象
         """
         try:
-            # 获取题库问题
             eval_question = EvalQuestions.objects.get(pk=self.question_bank_id)
             questions = eval_question.questions
             total_samples = len(questions)
 
-            # 初始化统计数据
+            if total_samples == 0:
+                self.logger.warning("题库为空，跳过批量评估。")
+                return evaluation_batch
+
             total_tokens = 0
             total_score = 0.0
-            completed = 0
-            last_reported_progress = 0
+            completed_count = 0
 
-            # 初始化进度
+            # 定义线程池的最大并发数
+            MAX_WORKERS = 3
+
             update_evaluation_progress(self.project_id, evaluation_batch.id, 0, "正在评估题库", "evaluating")
 
-            for question in questions:
-                # 执行单次评估
-                result = self.evaluate(question, evaluation_batch)
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                # 提交所有评估任务到线程池
+                future_to_question = {executor.submit(self.evaluate, q, evaluation_batch): q for q in questions}
 
-                if result:
-                    total_tokens += result[4] if len(result) > 4 else 0
+                for future in as_completed(future_to_question):
                     try:
-                        total_score += float(result[3]) if len(result) > 3 else 0.0
-                    except (ValueError, TypeError):
-                        pass
-                    completed += 1
+                        result = future.result()
+                        if result:
+                            total_tokens += result[4] if len(result) > 4 else 0
+                            try:
+                                total_score += float(result[3]) if len(result) > 3 else 0.0
+                            except (ValueError, TypeError):
+                                pass
+                    except Exception as exc:
+                        question_info = future_to_question[future].get('question', '未知问题')
+                        self.logger.error(f"评估问题 '{question_info[:20]}...' 时发生错误: {exc}")
+                    finally:
+                        completed_count += 1
+                        progress = int((completed_count / total_samples) * 100)
+                        print(f"当前进度:{progress}%")
+                        update_evaluation_progress(self.project_id, evaluation_batch.id, progress, "正在评估题库",
+                                                   "evaluating")
 
-                    # 计算当前进度
-                    progress = int((completed / total_samples) * 100)
-                    print(f"当前进度:{progress}%")
-                    update_evaluation_progress(self.project_id, evaluation_batch.id, progress, "正在评估题库",
-                                               "evaluating")
+                        # 检查是否取消
+                        cancelled, save_evaluation, _ = check_user_cancelled(self.project_id, evaluation_batch.id)
+                        if cancelled and not save_evaluation:
+                            raise Exception("用户取消模型测试")
 
-                # 检查用户是否取消了操作
-                cancelled, save_evaluation, evaluation_name = check_user_cancelled(self.project_id, evaluation_batch.id)
-                if cancelled and not save_evaluation:
-                    # 抛出异常来中断生成过程
-                    raise Exception("用户取消模型测试")
-
-            # 获取评估名称，如果没有则使用默认名称
             _, _, evaluation_name = check_user_cancelled(self.project_id, evaluation_batch.id)
             if not evaluation_name:
                 evaluation_name = f"评估批次-{evaluation_batch.id}"
 
-            # 更新评估批次数据
-            evaluation_batch.total_samples = completed
+            evaluation_batch.total_samples = completed_count
             evaluation_batch.total_tokens = total_tokens
-            evaluation_batch.name = evaluation_name  # 确保name字段有值
-            if completed > 0:
-                evaluation_batch.average_score = total_score / completed
+            evaluation_batch.name = evaluation_name
+            if completed_count > 0:
+                evaluation_batch.average_score = total_score / completed_count
             evaluation_batch.save()
 
             return evaluation_batch
@@ -212,7 +218,7 @@ class Evaluator:
 
     def run_full_evaluation(self, sample_size):
         """
-        执行完整评估 (已重构)
+        执行完整评估
         :param sample_size: 样本大小
         """
         from model_evaluation.models import ModelEvalMetrics
@@ -239,7 +245,7 @@ class Evaluator:
 
     def _hullucination_evaluation(self, model_name, N_EVAL_SAMPLE_SIZE=100):
         """
-        执行幻觉检测评估 (已重构，使用OneAPI配置)
+        执行幻觉检测评估
         """
         df = download_benchmark_dataset("binary-hallucination-classification", dataset_name="halueval_qa_data")
         df = (
@@ -263,7 +269,7 @@ class Evaluator:
 
     def _toxicity_evaluation(self, model_name, N_EVAL_SAMPLE_SIZE=100):
         """
-        执行毒性检测评估 (已重构，使用OneAPI配置)
+        执行毒性检测评估
         """
         df = download_benchmark_dataset(task="toxicity-classification", dataset_name="wiki_toxic-test")
         toxic_df, non_toxic_df = df[df["toxic"]], df[~df["toxic"]]

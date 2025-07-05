@@ -11,6 +11,10 @@ import json5
 import demjson3
 import random
 from core.one_api_client import OneAPIClient
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+import threading
+from openai import RateLimitError
 
 
 class QuestionGenerator:
@@ -255,114 +259,106 @@ class QuestionGenerator:
         返回:
         dict: 包含生成题目的JSON对象
         """
+        thread_id = threading.get_ident()  # 获取当前线程的ID
+
         if temperature is None:
             temperature = random.uniform(0.0, 1.0)
 
-        if example_question == "" and example_answer == "":
-            prompt = self._build_prompt_without_example(
-                question_num,
-                content_type,
-                question_type,
-                subfield
-            )
+        if not example_question and not example_answer:
+            prompt = self._build_prompt_without_example(question_num, content_type, question_type, subfield)
         else:
-            prompt = self._build_prompt(
-                example_question,
-                example_answer,
-                question_num,
-                content_type,
-                question_type
-            )
+            prompt = self._build_prompt(example_question, example_answer, question_num, content_type, question_type)
+
+        if not prompt or not prompt.strip():
+            print(
+                f"[Thread-{thread_id}] 错误: 生成的Prompt为空。输入参数: content_type={content_type}, subfield={subfield}")
+            return {"error": "内部错误：生成的Prompt为空"}
 
         system_prompt = self._build_system_prompt()
 
-        try:
-
-            response = self.one_api_client.get_chat_response(
-                system_prompt=system_prompt,
-                prompt=prompt,
-                temperature=temperature,
-                response_format={"type": "json_object"}
-            )
-
-            # 新版清洗逻辑（仅处理Markdown代码块）
-            json_str = response.strip()
-            json_str = json_str.replace("```json", "").replace("```", "").strip()
-
-            # 处理所有正斜杠转义（兼容Python低版本）
-            json_str = json_str.replace(r'\/', '/')
-
-            try:
-                # 优先使用json5解析（支持非标准JSON）
-                print(json5.loads(json_str))
-                return json5.loads(json_str)
-            except Exception as e:
-                print(f"JSON5解析失败，尝试demjson3: {str(e)}")
-                try:
-                    # 使用demjson3处理更复杂的格式
-                    return demjson3.decode(json_str)
-                except demjson3.JSONDecodeError as e2:
-                    print(f"最终JSON解析失败: {str(e2)}")
-                    return {
-                        "error": "Invalid JSON",
-                        "detail": str(e2),
-                        "raw_response": response
-                    }
-
-        except Exception as e:
-            return {"error": str(e)}
-
-    def _mulit_generate_questions(self, question_num, content_type, subfield, project_id, question_bank_id):
-        """
-        批量生成题目
-        """
-        question_list = []
-        error_count = 0
         max_retries = 3
+        retry_delay = 5
 
-        question_types = ["单选题", "多选题", "简答题", "案例分析题"]
-
-        for i in range(question_num):
-            retry = 0
-            question_type = random.choice(question_types)
-            while retry < max_retries:
-                result = self.generate_questions(
-                    content_type,
-                    question_type,
-                    question_num=1,
-                    temperature=None,
-                    subfield=subfield
+        for attempt in range(max_retries):
+            try:
+                response = self.one_api_client.get_chat_response(
+                    system_prompt=system_prompt,
+                    prompt=prompt,
+                    temperature=temperature,
+                    response_format={"type": "json_object"}
                 )
 
-                if isinstance(result, dict) and "error" not in result:
-                    # 处理可能返回的单个题目对象
-                    if isinstance(result, list):
-                        question_list.extend(result)
-                    else:
-                        question_list.append(result)
-                        # 调用进度回调函数
+                json_str = response.strip().replace("```json", "").replace("```", "").strip()
+                json_str = json_str.replace(r'\/', '/')
 
-                    # 更新进度并检查是否取消
-                    progress = int(((i + 1) / question_num) * 100)
-                    print(f"生成第{i+1}个问题，进度为{progress}%")
-                    if progress < 100:  # 保留最后的100%给整体完成时
-                        update_generation_progress(project_id, question_bank_id, progress, f"题目生成进度: {progress}%",
-                                                   "generating")
+                result_data = json5.loads(json_str)
+                print(f"[Thread-{thread_id}] 成功生成题目")
+                return result_data
 
-                        # 检查用户是否取消了操作
-                        cancelled, save_questions, bank_name = check_user_cancelled(project_id, question_bank_id)
-                        if cancelled and not save_questions:
-                            # 抛出异常来中断生成过程
-                            raise Exception("用户取消生成题库")
-                    break
+            except RateLimitError as e:
+                if attempt < max_retries - 1:
+                    print(
+                        f"[Thread-{thread_id}] 警告: 遇到API速率限制。等待 {retry_delay} 秒后重试... (第 {attempt + 1}/{max_retries} 次尝试)")
+                    time.sleep(retry_delay)
                 else:
-                    retry += 1
-                    print(f"第 {i + 1} 题生成失败，重试 {retry}/{max_retries}")
-                    if retry == max_retries:
-                        error_count += 1
-                        print(f"第 {i + 1} 题生成最终失败: {result.get('error', '未知错误')}")
+                    print(f"[Thread-{thread_id}] 错误: 重试 {max_retries} 次后仍然超速。任务失败。")
+                    return {"error": f"API速率超限，请稍后重试: {e}"}
+            except Exception as e:
+                print(f"[Thread-{thread_id}] 错误: 生成题目时发生未知异常: {e}")
+                return {"error": str(e)}
 
-        print(f"批量生成完成，成功 {question_num - error_count} 题，失败 {error_count} 题")
+    def _mulit_generate_questions(self, question_num, content_type, subfield, project_id, question_bank_id):
+        question_list = []
+        error_count = 0
+
+        MAX_WORKERS = 2
+        question_types = ["单选题", "多选题", "简答题", "案例分析题"]
+
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            print(f"[Main] 线程池已启动，并发数: {MAX_WORKERS}。准备提交 {question_num} 个生成任务...")
+            futures = {
+                executor.submit(
+                    self.generate_questions,
+                    content_type,
+                    random.choice(question_types),
+                    question_num=1,
+                    subfield=subfield
+                ): i for i in range(question_num)
+            }
+
+            completed_count = 0
+            for future in as_completed(futures):
+                completed_count += 1
+                try:
+                    result = future.result()
+                    if isinstance(result, dict) and "error" not in result:
+                        question_list.append(result)
+                    else:
+                        error_count += 1
+                        if result:
+                            print(f"[Main] 一个任务生成失败: {result.get('error', '未知错误')}")
+                        else:
+                            print("[Main] 一个任务生成失败，没有返回任何结果(None)。")
+
+                except Exception as e:
+                    error_count += 1
+                    print(f"[Main] 一个任务在执行中发生严重异常: {e}")
+                finally:
+                    progress = int((completed_count / question_num) * 100)
+
+                    # 只有在进度变化时才打印，避免刷屏
+                    if progress > getattr(self, '_last_reported_progress', -1):
+                        print(f"[Main] 进度更新: {progress}% ({completed_count}/{question_num})")
+                        if progress < 100:
+                            update_generation_progress(project_id, question_bank_id, progress,
+                                                       f"题目生成进度: {progress}%", "generating")
+                        self._last_reported_progress = progress
+
+                    cancelled, _, _ = check_user_cancelled(project_id, question_bank_id)
+                    if cancelled:
+                        raise Exception("用户取消生成题库")
+
+        print(f"[Main] 批量生成完成，成功 {len(question_list)} 题，失败 {error_count} 题")
         return question_list
 
 
