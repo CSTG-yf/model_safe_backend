@@ -271,7 +271,7 @@ class ModelHandler:
             print(f"获取项目模型失败: {e}")
             model_name = "moonshot-v1-8k"  # 默认值
 
-        print("被测试模型越狱回答:\n",self.call_model(system_prompt, user_prompt, model_name, 0.9))
+        # print("被测试模型越狱回答:\n",self.call_model(system_prompt, user_prompt, model_name, 0.9))
         return self.call_model(system_prompt, user_prompt, model_name, 0.9)  # 被攻击模型kimi
 
     def get_score(self, task, prompt, answer):
@@ -312,7 +312,7 @@ class ModelHandler:
                     rating = int(match.group(1))
                     reasons = str(match1.group(1))
                     print(f"评分：{rating}")
-                    print(f"评分理由：{reasons}")
+                    # print(f"评分理由：{reasons}")
                     return {"score":max(1, min(10, rating)),"reasons":reasons}
                 except ValueError:
                     print(f"无效的评分格式: {match.group(1)}")
@@ -1091,7 +1091,7 @@ class GraphState(TypedDict):    #状态管理类，每次迭代都要使用到�
 def extract_prompt(response):  # 获取攻击模型的new_prompt
     response = response.strip()
 
-    print(f"接收到的原始字符串: {response}")
+    # print(f"接收到的原始字符串: {response}")
 
     if not response:
         print("接收到的字符串为空！")
