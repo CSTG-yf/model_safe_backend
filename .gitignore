@@ -23,3 +23,5 @@ reports/
 # Migrations (except initial)
 */migrations/*
 !*/migrations/__init__.py
+
+local_eval_results/
