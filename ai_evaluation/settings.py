@@ -186,3 +186,20 @@ CACHES = {
         }
     }
 }
+
+LOGGING = {
+    'version': 1,
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'f:\\school\\服务外包\\后端\\ai_evaluation_backend\\logs\\websocket.log',
+        },
+    },
+    'loggers': {
+        'jailbreak_evaluation.consumers': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+        },
+    },
+}

@@ -3,6 +3,8 @@ import json
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from threading import Lock
+import logging
+logger = logging.getLogger(__name__)
 
 class ProgressConsumer(AsyncWebsocketConsumer):
     """
@@ -67,21 +69,25 @@ class ProgressConsumer(AsyncWebsocketConsumer):
     @classmethod
     def send_message(cls, message, task_id):
         with cls._lock:  # 确保同一时间只有一个线程发送消息
-            """
-            同步方法，用于从其他地方发送消息到WebSocket
-            
-            Args:
-                message: 要发送的消息内容
-                task_id: 任务ID，用于标识发送目标
-            """
-            channel_layer = get_channel_layer()
-            group_name = f'jailbreak_evaluation_{task_id}'
-            
-            # 使用async_to_sync将异步调用转换为同步调用
-            async_to_sync(channel_layer.group_send)(
-                group_name,
-                {
-                    'type': 'send_progress',
-                    'message': message
-                }
-            )
+            try:
+                """
+                同步方法，用于从其他地方发送消息到WebSocket
+                
+                Args:
+                    message: 要发送的消息内容
+                    task_id: 任务ID，用于标识发送目标
+                """
+                channel_layer = get_channel_layer()
+                group_name = f'jailbreak_evaluation_{task_id}'
+                
+                # 使用async_to_sync将异步调用转换为同步调用
+                async_to_sync(channel_layer.group_send)(
+                    group_name,
+                    {
+                        'type': 'send_progress',
+                        'message': message
+                    }
+                )
+                logger.info(f"消息已提交到channel layer\n{message}")
+            except Exception as e:
+                logger.error(f"发送消息到channel layer失败: {str(e)}", exc_info=True)
