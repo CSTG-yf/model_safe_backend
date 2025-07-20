@@ -71,33 +71,32 @@ class EvaluationRunView(APIView):
     def post(self, request, evaluation_id):
         data = request.data
 
-        # 校验必要参数
+        evaluation_mode = data.get("evaluation_mode", "one_api")  # 默认为 one_api 模式
+        local_api_base = data.get("local_api_base", None)  # 本地部署的API地址
+
+        if evaluation_mode == 'local' and not local_api_base:
+            return Response({"error": "本地评估模式下，必须提供 local_api_base 参数"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         question_bank_id = data.get("question_bank_id")
         if not question_bank_id:
-            return Response(
-                {"error": "缺少必要参数：question_bank_id"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "缺少必要参数：question_bank_id"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 获取评测记录实例
         evaluation_batch = get_object_or_404(EvaluationBatch, id=evaluation_id)
 
-        # 获取题库实例
         try:
             question_bank = EvalQuestions.objects.get(question_bank_id=question_bank_id)
         except EvalQuestions.DoesNotExist:
-            return Response(
-                {"error": "题库不存在"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return Response({"error": "题库不存在"}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            # 初始化评估器
             evaluator = Evaluator(
                 model_name=evaluation_batch.model_name,
                 eval_model_name=evaluation_batch.evaluator_model_name,
-                project_id=evaluation_batch.project.id,
-                question_bank_id=question_bank.question_bank_id,
+                project_id=str(evaluation_batch.project.id),
+                question_bank_id=str(question_bank.question_bank_id),
+                evaluation_mode=evaluation_mode,
+                local_api_base=local_api_base
             )
 
             # Step 1: 执行基础指标评估（幻觉和毒性检测）
