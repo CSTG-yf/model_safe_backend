@@ -2,6 +2,10 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 import json
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 class QuestionBankConsumer(AsyncWebsocketConsumer):
     """
@@ -15,11 +19,11 @@ class QuestionBankConsumer(AsyncWebsocketConsumer):
         """建立WebSocket连接"""
         # 从URL路径中获取评估任务的唯一标识
         self.project_id = self.scope['url_route']['kwargs'].get('project_id', 0)
-        print("self.project_id为:", self.project_id)
+        logger.info("Question bank websocket connecting project_id=%s", self.project_id)
         self.group_name = f'{self.project_id}'
         
         if self.project_id in QuestionBankConsumer.active_connections:
-            print("该任务已经有一个活跃连接")
+            logger.info("Question bank websocket already active project_id=%s", self.project_id)
             await self.close()
             return
 

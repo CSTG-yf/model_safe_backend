@@ -1,8 +1,12 @@
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import AsyncWebsocketConsumer
 import json
+import logging
 
 from channels.layers import get_channel_layer
+
+
+logger = logging.getLogger(__name__)
 
 
 class EvaluationConsumer(AsyncWebsocketConsumer):
@@ -14,7 +18,7 @@ class EvaluationConsumer(AsyncWebsocketConsumer):
         self.group_name = f"evaluation_{self.evaluation_batch}"
 
         if self.evaluation_batch in EvaluationConsumer.active_connections:
-            print("该任务已经有一个活跃连接")
+            logger.info("Evaluation websocket already active evaluation_batch=%s", self.evaluation_batch)
             await self.close()
             return
 

@@ -1,7 +1,11 @@
 import hashlib
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from celery import shared_task
 from .utils import ModelHandler, JailbreakWorkflow, JailbreakService
+
+
+logger = logging.getLogger(__name__)
 
 
 def process_item(item, session_id, session_name, project_id, mode):
@@ -31,13 +35,23 @@ def process_item(item, session_id, session_name, project_id, mode):
         for step in workflow.stream(initial_state):
             initial_state.update(step)
             
-    except Exception as e:
-        print(f"处理项目{item['category_index']}-{item['title_index']}-{item['prompt_num']}失败: {e}")
+    except Exception:
+        logger.exception(
+            "Failed to process jailbreak item category=%s title=%s prompt=%s",
+            item["category_index"],
+            item["title_index"],
+            item["prompt_num"],
+        )
 
 @shared_task
 def run_jailbreak_workflow(model_name, ev_time, project_id, mode):
-    print("进入run_jailbreak_workflow")
-    print(f"收到的参数：{model_name},{ev_time},{project_id},{mode}")
+    logger.info(
+        "Starting jailbreak workflow model=%s ev_time=%s project_id=%s mode=%s",
+        model_name,
+        ev_time,
+        project_id,
+        mode,
+    )
     session_id = hashlib.sha256((str(project_id) + model_name + '_' + ev_time + '_' + str(mode)).encode()).hexdigest()
     session_name = str(project_id) + '_' + model_name + '_' + ev_time + '_' + str(mode)
     data = JailbreakService.get_simple_questions()
@@ -55,5 +69,5 @@ def run_jailbreak_workflow(model_name, ev_time, project_id, mode):
         for future in futures:
             try:
                 future.result()  # 获取结果，如有异常会抛出
-            except Exception as e:
-                print(f"任务执行出错: {e}")
+            except Exception:
+                logger.exception("Jailbreak workflow future failed")

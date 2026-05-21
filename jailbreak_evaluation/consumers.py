@@ -18,11 +18,11 @@ class ProgressConsumer(AsyncWebsocketConsumer):
         """建立WebSocket连接"""
         # 从URL路径中获取评估任务的唯一标识,task_id由project_id,model_name和ev_time共同决定
         self.task_id = self.scope['url_route']['kwargs'].get('task_id', 'default')
-        print("self.task_id为:", self.task_id)
+        logger.info("Jailbreak websocket connecting task_id=%s", self.task_id)
         self.group_name = f'jailbreak_evaluation_{self.task_id}'
         
         if self.task_id in ProgressConsumer.active_connections:
-            print("该任务已经有一个活跃连接")
+            logger.info("Jailbreak websocket already active task_id=%s", self.task_id)
             await self.close()
             return
 
@@ -88,6 +88,7 @@ class ProgressConsumer(AsyncWebsocketConsumer):
                         'message': message
                     }
                 )
-                logger.info(f"消息已提交到channel layer\n{message}")
+                # logger.info(f"消息已提交到channel layer\n{message}")
             except Exception as e:
-                logger.error(f"发送消息到channel layer失败: {str(e)}", exc_info=True)
+                # logger.error(f"发送消息到channel layer失败: {str(e)}", exc_info=True)
+                logger.exception("Failed to send jailbreak websocket message: %s", e)

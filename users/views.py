@@ -4,6 +4,10 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
 from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_tokens_for_user(user):
@@ -89,7 +93,7 @@ class UserProfileView(views.APIView):
     def put(self, request):
         """ 修改当前用户的用户名 """
         new_username = request.data.get("username")
-        print(f"Received username: {new_username} (type: {type(new_username)})")
+        logger.info("Updating username user_id=%s", request.user.id)
 
         if not new_username:
             return Response({"result": "error", "message": "请提供新的用户名"}, status=status.HTTP_400_BAD_REQUEST)

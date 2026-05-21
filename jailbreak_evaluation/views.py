@@ -4,16 +4,21 @@ from rest_framework.response import Response
 from .tasks import run_jailbreak_workflow
 from .utils import JailbreakService
 from .serializers import ScoreRecordSerializer
+from .models import ScoreRecord
 from rest_framework.decorators import action
 from rest_framework import status
 from rest_framework import  permissions
+from core.permissions import require_project_member
 
 class StartWorkflowAPI(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
     def post(self,request):
         """启动工作流"""
         data = request.data
         project_id = data['project_id']
+        permission_error = require_project_member(request.user, project_id)
+        if permission_error:
+            return permission_error
         model_name = data['model_name']
         ev_time = data['ev_time']
         mode = data['mode']
@@ -21,7 +26,6 @@ class StartWorkflowAPI(APIView):
         try:
             celery_task_result = run_jailbreak_workflow.delay(model_name, ev_time,project_id,mode)
             celery_task_id = celery_task_result.id
-            print("成功启动工作流，生成celery_task_id",celery_task_id)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
@@ -50,8 +54,13 @@ class ScoreHistoryViewSet(viewsets.ModelViewSet):
     包含标准 CRUD 和自定义查询操作
     """
     serializer_class = ScoreRecordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = ScoreRecord.objects.all()
     @action(detail=False, methods=['get'], url_path='(?P<project_id>[^/.]+)/get-taskids')
     def get_all_score_history(self, request,project_id=None):
+        permission_error = require_project_member(request.user, project_id)
+        if permission_error:
+            return permission_error
         """获取全部记录"""
         try:
             records = JailbreakService.get_all_session_by_project_id(project_id)
@@ -61,6 +70,9 @@ class ScoreHistoryViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='(?P<project_id>[^/.]+)/query-by-task-id')
     def query_by_session_id(self, request,project_id=None):
+        permission_error = require_project_member(request.user, project_id)
+        if permission_error:
+            return permission_error
         """自定义参数查询"""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -76,6 +88,9 @@ class ScoreHistoryViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='(?P<project_id>[^/.]+)/get-score-in-category')
     def get_score_in_category(self, request,project_id=None):
+        permission_error = require_project_member(request.user, project_id)
+        if permission_error:
+            return permission_error
         """自定义参数查询"""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

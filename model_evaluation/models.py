@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from projects.models import Project
+from question_bank.models import Question, QuestionBank
 
 
 # class ModelAPI(models.Model):
@@ -130,3 +131,251 @@ class OverallResult(models.Model):
 
     def __str__(self):
         return f"记录 {self.id} (模型评估结果: {self.project_score})"
+
+
+class EvaluationRun(models.Model):
+    """Unified evaluation task covering normal, jailbreak, RAG, Agent, and regression runs."""
+
+    RUN_TYPES = [
+        ("normal_eval", "Normal evaluation"),
+        ("jailbreak", "Jailbreak evaluation"),
+        ("rag", "RAG evaluation"),
+        ("agent", "Agent evaluation"),
+        ("regression", "Regression evaluation"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("running", "Running"),
+        ("cancelling", "Cancelling"),
+        ("cancelled", "Cancelled"),
+        ("failed", "Failed"),
+        ("completed", "Completed"),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    legacy_batch = models.OneToOneField(
+        EvaluationBatch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="unified_run",
+    )
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="evaluation_runs")
+    question_bank = models.ForeignKey(
+        QuestionBank,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evaluation_runs",
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    run_type = models.CharField(max_length=32, choices=RUN_TYPES, default="normal_eval")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="pending")
+    task_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
+    model_name = models.CharField(max_length=255, blank=True, default="")
+    evaluator_model_name = models.CharField(max_length=255, blank=True, default="")
+    model_config = models.JSONField(default=dict, blank=True)
+    prompt_version = models.CharField(max_length=128, blank=True, default="")
+    question_bank_version = models.PositiveIntegerField(null=True, blank=True)
+    total_cases = models.PositiveIntegerField(default=0)
+    completed_cases = models.PositiveIntegerField(default=0)
+    failed_cases = models.PositiveIntegerField(default=0)
+    average_score = models.FloatField(null=True, blank=True)
+    total_tokens = models.PositiveIntegerField(default=0)
+    progress = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True, default="")
+    created_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_evaluation_runs",
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "evaluation_run"
+        indexes = [
+            models.Index(fields=["project", "run_type", "status"]),
+            models.Index(fields=["project", "created_at"]),
+            models.Index(fields=["task_id"]),
+        ]
+
+    def mark_running(self, task_id=""):
+        self.status = "running"
+        if task_id:
+            self.task_id = task_id
+        if not self.started_at:
+            self.started_at = timezone.now()
+        self.save(update_fields=["status", "task_id", "started_at", "updated_at"])
+
+    def mark_finished(self, status="completed", error_message=""):
+        self.status = status
+        self.error_message = error_message
+        self.finished_at = timezone.now()
+        if status == "completed":
+            self.progress = 100
+        self.save(update_fields=["status", "error_message", "finished_at", "progress", "updated_at"])
+
+    def __str__(self):
+        return f"{self.name} ({self.run_type}/{self.status})"
+
+
+class EvaluationCase(models.Model):
+    run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="cases")
+    question = models.ForeignKey(
+        Question,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evaluation_cases",
+    )
+    case_id = models.CharField(max_length=128, db_index=True)
+    input_payload = models.JSONField(default=dict, blank=True)
+    expected_output = models.TextField(blank=True, default="")
+    scoring_criteria = models.JSONField(default=dict, blank=True)
+    risk_tags = models.JSONField(default=list, blank=True)
+    position = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "evaluation_case"
+        unique_together = ("run", "case_id")
+        ordering = ["run_id", "position", "id"]
+        indexes = [
+            models.Index(fields=["run", "case_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.run_id}:{self.case_id}"
+
+
+class EvaluationCaseResult(models.Model):
+    case = models.OneToOneField(EvaluationCase, on_delete=models.CASCADE, related_name="result")
+    output_text = models.TextField(blank=True, default="")
+    judge_output = models.JSONField(default=dict, blank=True)
+    score = models.FloatField(null=True, blank=True)
+    risk_level = models.CharField(max_length=32, blank=True, default="")
+    evidence = models.JSONField(default=list, blank=True)
+    tokens = models.PositiveIntegerField(default=0)
+    latency_ms = models.PositiveIntegerField(null=True, blank=True)
+    error_message = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "evaluation_case_result"
+        indexes = [
+            models.Index(fields=["score"]),
+            models.Index(fields=["risk_level"]),
+        ]
+
+    def __str__(self):
+        return f"{self.case.case_id}: {self.score}"
+
+
+class EvaluationMetric(models.Model):
+    run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="metrics")
+    name = models.CharField(max_length=128)
+    value = models.FloatField()
+    unit = models.CharField(max_length=64, blank=True, default="")
+    scope = models.CharField(max_length=128, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "evaluation_metric"
+        unique_together = ("run", "name", "scope")
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["run", "name"]),
+        ]
+
+    def __str__(self):
+        return f"{self.run_id}:{self.name}={self.value}"
+
+
+class EvaluationArtifact(models.Model):
+    run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="artifacts")
+    artifact_type = models.CharField(max_length=64)
+    name = models.CharField(max_length=255)
+    file = models.FileField(upload_to="evaluation_artifacts/%Y/%m/%d/", blank=True, null=True)
+    content = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "evaluation_artifact"
+        indexes = [
+            models.Index(fields=["run", "artifact_type"]),
+        ]
+
+    def __str__(self):
+        return f"{self.run_id}:{self.artifact_type}:{self.name}"
+
+
+class MetricDefinition(models.Model):
+    """Reusable metric definition for dashboards, reports, and experiments."""
+
+    DIRECTION_CHOICES = [
+        ("higher_better", "Higher is better"),
+        ("lower_better", "Lower is better"),
+        ("neutral", "Neutral"),
+    ]
+
+    code = models.CharField(max_length=128, unique=True)
+    name = models.CharField(max_length=255)
+    category = models.CharField(max_length=128, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    unit = models.CharField(max_length=64, blank=True, default="")
+    direction = models.CharField(max_length=32, choices=DIRECTION_CHOICES, default="neutral")
+    default_threshold = models.FloatField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "metric_definition"
+        indexes = [
+            models.Index(fields=["category", "is_active"]),
+            models.Index(fields=["code"]),
+        ]
+
+    def __str__(self):
+        return f"{self.code}: {self.name}"
+
+
+class MetricValue(models.Model):
+    """Metric value scoped to a project, model, run, risk type, or time window."""
+
+    definition = models.ForeignKey(MetricDefinition, on_delete=models.CASCADE, related_name="values")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="metric_values")
+    run = models.ForeignKey(
+        EvaluationRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="metric_values",
+    )
+    model_name = models.CharField(max_length=255, blank=True, default="")
+    risk_code = models.CharField(max_length=128, blank=True, default="")
+    value = models.FloatField()
+    unit = models.CharField(max_length=64, blank=True, default="")
+    dimensions = models.JSONField(default=dict, blank=True)
+    measured_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "metric_value"
+        indexes = [
+            models.Index(fields=["project", "measured_at"]),
+            models.Index(fields=["definition", "model_name"]),
+            models.Index(fields=["risk_code"]),
+        ]
+
+    def __str__(self):
+        return f"{self.definition.code}={self.value}"

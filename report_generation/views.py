@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.shortcuts import get_object_or_404
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from jailbreak_evaluation.utils import JailbreakService
 from model_evaluation.models import OverallResult
@@ -15,18 +15,32 @@ from .serializers import (
     ReportCreateUpdateSerializer
 )
 from .utils import ReportGenerator
+from core.permissions import user_has_project_role
 
 
-class ReportGenerationAPIView(APIView):
+class ProjectScopedReportAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        project_id = self._resolve_project_id(request, kwargs)
+        if project_id and not user_has_project_role(request.user, project_id):
+            raise PermissionDenied("You do not have permission to access this project.")
+
+    def _resolve_project_id(self, request, kwargs):
+        report_id = kwargs.get("report_id")
+        if report_id:
+            return Report.objects.filter(id=report_id).values_list("project_id", flat=True).first()
+        return request.query_params.get("project_id") or request.data.get("project_id")
+
+
+class ReportGenerationAPIView(ProjectScopedReportAPIView):
     """报告生成主接口 (支持query和body传project_id)"""
-    permission_classes = [permissions.AllowAny]
-
     def _get_project(self, user, project_id):
         """获取项目并验证权限"""
         return get_object_or_404(
             Project,
-            id=project_id,
-            created_by=user
+            id=project_id
         )
     # GET /api/report-generation/reports/evaluation-info/?project_id=<project_id>
     def get_evaluation_info(self, request):
@@ -108,15 +122,12 @@ class ReportGenerationAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class ReportDetailAPIView(APIView):
+class ReportDetailAPIView(ProjectScopedReportAPIView):
     """报告详情操作接口"""
-    permission_classes = [permissions.IsAuthenticated]
-
     def _get_report(self, user, report_id):
         return get_object_or_404(
             Report,
-            id=report_id,
-            project__created_by=user
+            id=report_id
         )
 
     # GET /api/report-generation/report/<report_id>/

@@ -26,7 +26,7 @@
 #         model_name,
 #         project_id,
 #         question_bank_id,
-#         eval_api_key="sk-8b86a4d58a3e46a5b577a13a48ca560e",
+#         eval_api_key="set-via-env",
 #         eval_base_url="https://api.deepseek.com",
 #         eval_model_name="deepseek-chat",
 #         logger_name=__name__,

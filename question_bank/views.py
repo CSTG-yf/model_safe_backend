@@ -8,8 +8,34 @@ from .services import generated_questions_and_add_to_database,get_question_gener
 from django.utils import timezone
 from projects.models import Project
 import logging
+from rest_framework.exceptions import PermissionDenied
+from core.permissions import user_has_project_role
 
 logger = logging.getLogger(__name__)
+
+
+class ProjectScopedQuestionAPIView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        project_id = self._resolve_project_id(request, kwargs)
+        if project_id and not user_has_project_role(request.user, project_id):
+            raise PermissionDenied("You do not have permission to access this project.")
+
+    def _resolve_project_id(self, request, kwargs):
+        if kwargs.get("project_id"):
+            return kwargs["project_id"]
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            project_id = request.data.get("project_id")
+            if project_id:
+                return project_id
+        question_bank_id = kwargs.get("question_bank_id")
+        if question_bank_id:
+            return EvalQuestions.objects.filter(
+                question_bank_id=question_bank_id
+            ).values_list("project_id", flat=True).first()
+        return None
 
 
 
@@ -25,10 +51,8 @@ def check_project_membership(user, project_id):
 
 
 
-class SearchQuestionBankView(views.APIView):
+class SearchQuestionBankView(ProjectScopedQuestionAPIView):
     """ 搜索或列出当前 `project_id` 下的题库 """
-    permission_classes = [permissions.IsAuthenticated]
-
     def post(self, request, project_id):
         """
         - 传入 `exam_title`：模糊搜索题库
@@ -65,10 +89,8 @@ class SearchQuestionBankView(views.APIView):
 
 
 
-class QuestionBankUpdateDeleteView(views.APIView):
+class QuestionBankUpdateDeleteView(ProjectScopedQuestionAPIView):
     """ 修改和删除题库 """
-    permission_classes = [permissions.IsAuthenticated]
-
     def get_object(self, question_bank_id):
         """ 获取 `EvalQuestions` 实例，确保用户是项目成员 """
         question_bank = get_object_or_404(EvalQuestions, question_bank_id=question_bank_id)
@@ -126,7 +148,7 @@ class QuestionBankUpdateDeleteView(views.APIView):
 class SecurityQuestionListView(generics.ListAPIView):
     """ 获取所有安全题库的内容 """
     serializer_class = SecurityQuestionsSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
     queryset = SecurityQuestions.objects.all()
 
     def list(self, request, *args, **kwargs):
@@ -140,10 +162,8 @@ class SecurityQuestionListView(generics.ListAPIView):
         }, status=status.HTTP_200_OK)
 
 
-class SingleQuestionBankView(views.APIView):
+class SingleQuestionBankView(ProjectScopedQuestionAPIView):
     """ 获取单个观测题库的题目 """
-    permission_classes = [permissions.AllowAny]
-
     def get(self, request, question_bank_id):
         """ 获取某个题库的 `questions` 字段 """
         question_bank = get_object_or_404(EvalQuestions, question_bank_id=question_bank_id)
@@ -155,10 +175,8 @@ class SingleQuestionBankView(views.APIView):
         }, status=status.HTTP_200_OK)
 
 
-class GenerateObservationQuestionBankView(views.APIView):
+class GenerateObservationQuestionBankView(ProjectScopedQuestionAPIView):
     """ 生成观测题库（调用 AI + 安全题库）"""
-    permission_classes = [permissions.AllowAny]
-
     def get(self, request, project_id):
         """ 获取预生成题库id """
         try:
@@ -187,9 +205,7 @@ class GenerateObservationQuestionBankView(views.APIView):
         return generated_questions_and_add_to_database(request,project_id)
 
 
-class QuestionDetailView(views.APIView):
-
-    permission_classes = [permissions.AllowAny]
+class QuestionDetailView(ProjectScopedQuestionAPIView):
 
     """
     处理单个题目的查看、修改和删除操作
@@ -288,7 +304,7 @@ class QuestionDetailView(views.APIView):
             "message": "Question not found",
         }, status=status.HTTP_404_NOT_FOUND)
 
-class QuestionGenerationProgressView(views.APIView):
+class QuestionGenerationProgressView(ProjectScopedQuestionAPIView):
     """
     获取题库生成进度的视图
     """
@@ -299,12 +315,10 @@ class QuestionGenerationProgressView(views.APIView):
         return get_question_generation_progress(request,project_id)
 
 
-class CancelQuestionGenerationView(views.APIView):
+class CancelQuestionGenerationView(ProjectScopedQuestionAPIView):
     """
     取消题库生成过程的视图
     """
-    permission_classes = [permissions.AllowAny]
-
     def post(self, request, project_id):
         """
         处理POST请求，取消题库生成过程

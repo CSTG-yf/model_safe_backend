@@ -5,6 +5,7 @@
 
 # Python
 .venv/
+.conda-py311/
 **/__pycache__/
 *.py[cod]
 *$py.class
@@ -14,14 +15,16 @@
 *.log
 *.pot
 db.sqlite3
+dump.rdb
 media/
 reports/
+logs/
 
 # Environment
 .env
+password.py
 
-# Migrations (except initial)
-*/migrations/*
-!*/migrations/__init__.py
+# Migrations
+*/migrations/__pycache__/
 
 local_eval_results/

@@ -10,12 +10,44 @@ from .services import Evaluator
 from projects.models import Project
 from question_bank.models import EvalQuestions
 from django.http import Http404
+from rest_framework.exceptions import PermissionDenied
 from jailbreak_evaluation.utils import JailbreakService
 from .services import get_evaluation_progress, check_user_cancelled, cancel_model_evaluation
+from core.permissions import user_has_project_role
 
 
-class EvaluationCreateView(APIView):
-    permission_classes = [permissions.AllowAny]
+class ProjectScopedAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        project_id = self._resolve_project_id(request, kwargs)
+        if project_id and not user_has_project_role(request.user, project_id):
+            raise PermissionDenied("You do not have permission to access this project.")
+
+    def _resolve_project_id(self, request, kwargs):
+        if kwargs.get("project_id"):
+            return kwargs["project_id"]
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            project_id = request.data.get("project_id")
+            if project_id:
+                return project_id
+        project_id = request.query_params.get("project_id")
+        if project_id:
+            return project_id
+        evaluation_id = kwargs.get("evaluation_id")
+        if evaluation_id:
+            return EvaluationBatch.objects.filter(id=evaluation_id).values_list("project_id", flat=True).first()
+        record_id = kwargs.get("record_id")
+        if record_id:
+            return EvaluationRecord.objects.filter(record_id=record_id).values_list("evaluation__project_id", flat=True).first()
+        result_id = kwargs.get("pk")
+        if result_id:
+            return OverallResult.objects.filter(id=result_id).values_list("project_id", flat=True).first()
+        return None
+
+
+class EvaluationCreateView(ProjectScopedAPIView):
 
     def post(self, request):
         data = request.data
@@ -65,8 +97,7 @@ class EvaluationCreateView(APIView):
         )
 
 
-class EvaluationRunView(APIView):
-    permission_classes = [permissions.AllowAny]
+class EvaluationRunView(ProjectScopedAPIView):
 
     def post(self, request, evaluation_id):
         data = request.data
@@ -126,13 +157,11 @@ class EvaluationRunView(APIView):
             )
 
 
-class EvaluationListView(APIView):
+class EvaluationListView(ProjectScopedAPIView):
     """
     获取评测记录列表接口
     - GET: 根据项目ID获取评测记录列表
     """
-    permission_classes = [permissions.AllowAny]
-
     def get(self, request):
         """
         获取评测记录列表
@@ -170,8 +199,7 @@ class EvaluationListView(APIView):
         )
 
 
-class EvaluationDetailView(APIView):
-    permission_classes = [permissions.AllowAny]
+class EvaluationDetailView(ProjectScopedAPIView):
 
     def get(self, request, evaluation_id):
         """
@@ -253,13 +281,11 @@ class EvaluationDetailView(APIView):
             )
 
 
-class EvaluationReviewView(APIView):
+class EvaluationReviewView(ProjectScopedAPIView):
     """
     评测审核接口
     - PUT: 将评测标记为已审核
     """
-    permission_classes = [permissions.AllowAny]
-
     def put(self, request, evaluation_id):
         """
         将评测标记为已审核
@@ -299,15 +325,13 @@ class EvaluationReviewView(APIView):
             )
 
 
-class EvaluationRecordDetailView(APIView):
+class EvaluationRecordDetailView(ProjectScopedAPIView):
     """
     题目详情操作接口
     - GET: 获取题目详情
     - PUT: 更新题目分数
     - DELETE: 删除题目
     """
-    permission_classes = [permissions.AllowAny]  # 根据需求调整权限
-
     def get_object(self, record_id):
         try:
             return EvaluationRecord.objects.get(record_id=record_id)
@@ -398,12 +422,10 @@ class EvaluationRecordDetailView(APIView):
         evaluation_batch.save()
 
 
-class OverallResultView(APIView):
+class OverallResultView(ProjectScopedAPIView):
     """
     评估结果资源端点 (支持POST/PUT/GET)
     """
-    permission_classes = [permissions.IsAuthenticated]
-
     def post(self, request):
         """创建新的模型评估"""
         project_id = request.data.get("project_id")
@@ -436,7 +458,6 @@ class OverallResultView(APIView):
             if jailbreak_evaluation_ids:
                 for session_name in jailbreak_evaluation_ids:
                     category_scores = JailbreakService.get_score_in_category(session_name, project_id)
-                    print(category_scores)
                     for item in category_scores:
                         title = item['title']
                         if title not in merged_data:
@@ -585,12 +606,10 @@ class OverallResultView(APIView):
             )
 
 
-class OverallResultListView(APIView):
+class OverallResultListView(ProjectScopedAPIView):
     """
     获取项目评估结果列表
     """
-    permission_classes = [permissions.IsAuthenticated]
-
     def get(self, request):
         """获取项目评估结果列表"""
         project_id = request.query_params.get("project_id")
@@ -621,7 +640,7 @@ class OverallResultListView(APIView):
         )
 
 
-class EvaluationProgressView(APIView):
+class EvaluationProgressView(ProjectScopedAPIView):
     """
     获取评估进度的视图
     """
@@ -631,12 +650,10 @@ class EvaluationProgressView(APIView):
         """
         return get_evaluation_progress(request,project_id)
 
-class CancelModelEvaluationView(APIView):
+class CancelModelEvaluationView(ProjectScopedAPIView):
     """
     取消题库生成过程的视图
     """
-    permission_classes = [permissions.AllowAny]
-
     def post(self, request, project_id):
         """
         处理POST请求，取消题库生成过程

@@ -5,6 +5,10 @@ import threading
 import time
 import psutil
 from typing import Tuple, Any, Dict
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 try:
     import pynvml
@@ -12,7 +16,7 @@ try:
     NVML_AVAILABLE = True
 except ImportError:
     NVML_AVAILABLE = False
-    print("警告: pynvml库未安装，将无法监控GPU。请运行 'pip install pynvml' 进行安装。")
+    logger.warning("pynvml is not installed; GPU monitoring is disabled.")
 
 
 class SystemMonitor(threading.Thread):
@@ -29,7 +33,7 @@ class SystemMonitor(threading.Thread):
                 pynvml.nvmlInit()
                 self.gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             except pynvml.NVMLError as e:
-                print(f"错误: 无法初始化NVIDIA监控库(NVML): {e}。将禁用GPU监控。")
+                logger.warning("Failed to initialize NVML; GPU monitoring is disabled: %s", e)
                 self.gpu_handle = None
 
         self.results = {
