@@ -1,0 +1,15 @@
+.venv/
+.conda-py311/
+.uv-cache/
+__pypackages__/
+__pycache__/
+*.pyc
+.env
+logs/
+media/
+reports/
+dump.rdb
+chroma_data/
+redis_data/
+mysql_data/
+ollama_models/

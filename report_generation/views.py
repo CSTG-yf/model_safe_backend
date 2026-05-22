@@ -5,7 +5,9 @@ from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from jailbreak_evaluation.utils import JailbreakService
-from model_evaluation.models import OverallResult
+from mitigation.models import MitigationRecommendation, RegressionSet
+from mitigation.serializers import MitigationRecommendationSerializer, RegressionSetSerializer
+from model_evaluation.models import EvaluationRun, OverallResult
 from model_evaluation.serializers import OverallResultSerializer
 from .models import Report
 from projects.models import Project
@@ -16,6 +18,10 @@ from .serializers import (
 )
 from .utils import ReportGenerator
 from core.permissions import user_has_project_role
+from core.responses import error_response, success_response
+from trace_analysis.models import AppTrace
+from trace_analysis.serializers import AppTraceListSerializer
+from .services import CompetitionPackageService
 
 
 class ProjectScopedReportAPIView(APIView):
@@ -162,3 +168,54 @@ class ReportDetailAPIView(ProjectScopedReportAPIView):
             {"detail": "Report deleted successfully"},
             status=status.HTTP_204_NO_CONTENT
         )
+
+
+class ReportDiagnosticDataAPIView(ProjectScopedReportAPIView):
+    """Risk diagnosis data for competition reports and frontend report previews."""
+
+    def get(self, request):
+        project_id = request.query_params.get("project_id")
+        if not project_id:
+            return error_response("project_id is required.", code="invalid_params", status_code=status.HTTP_400_BAD_REQUEST)
+
+        runs = EvaluationRun.objects.filter(project_id=project_id).order_by("-created_at")[:20]
+        traces = AppTrace.objects.filter(project_id=project_id).order_by("-created_at")[:50]
+        recommendations = MitigationRecommendation.objects.filter(project_id=project_id).order_by("-created_at")[:50]
+        regression_sets = RegressionSet.objects.filter(project_id=project_id).order_by("-created_at")[:20]
+
+        risk_summary = {}
+        for trace in traces:
+            risk_summary[trace.risk_level] = risk_summary.get(trace.risk_level, 0) + 1
+
+        data = {
+            "project_id": int(project_id),
+            "run_summary": [
+                {
+                    "id": run.id,
+                    "name": run.name,
+                    "run_type": run.run_type,
+                    "status": run.status,
+                    "average_score": run.average_score,
+                    "created_at": run.created_at,
+                }
+                for run in runs
+            ],
+            "risk_summary": risk_summary,
+            "traces": AppTraceListSerializer(traces, many=True).data,
+            "recommendations": MitigationRecommendationSerializer(recommendations, many=True).data,
+            "regression_sets": RegressionSetSerializer(regression_sets, many=True).data,
+        }
+        return success_response(data)
+
+
+class CompetitionPackageAPIView(ProjectScopedReportAPIView):
+    """Aggregated data for competition demos, defense slides, and frontend report pages."""
+
+    def get(self, request):
+        project_id = request.query_params.get("project_id")
+        if not project_id:
+            return error_response("project_id is required.", code="invalid_params", status_code=status.HTTP_400_BAD_REQUEST)
+
+        target_model_name = request.query_params.get("target_model_name", "")
+        data = CompetitionPackageService.build(project_id=project_id, target_model_name=target_model_name)
+        return success_response(data)

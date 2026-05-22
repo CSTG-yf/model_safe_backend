@@ -6,25 +6,55 @@
 # Python
 .venv/
 .conda-py311/
+.uv-cache/
 **/__pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # Django
 *.log
 *.pot
 db.sqlite3
+*.sqlite3
+*.db
 dump.rdb
 media/
 reports/
 logs/
+celerybeat-schedule*
 
 # Environment
 .env
+.env.*
+!.env.example
 password.py
+local_settings.py
+ai_evaluation/local_settings.py
+
+# Local Docker overrides
+docker-compose.override.yml
+docker-compose.local.yml
+*.local.yml
+
+# Local test artifacts
+test-results/
+junit*.xml
+*.tmp
+*.bak
+tmp/
+temp/
 
 # Migrations
 */migrations/__pycache__/
 
 local_eval_results/
+
+# Agent-local planning notes
+docs/superpowers/

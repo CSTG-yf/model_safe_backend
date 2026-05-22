@@ -64,6 +64,12 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "core",
+    "trace_analysis",
+    "redteam_engine",
+    "mitigation",
+    "rag_security",
+    "protection_strategy",
+    "agent_security",
     "question_bank",
     "model_evaluation",
     "report_generation",
@@ -170,11 +176,28 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env_int("JWT_REFRESH_TOKEN_DAYS", 7)),
 }
 
-DEFAULT_MODEL_NAME = env("DEFAULT_MODEL_NAME", "moonshot-v1-8k")
-DEFAULT_EVAL_MODEL_NAME = env("DEFAULT_EVAL_MODEL_NAME", "deepseek-v3")
+# Platform-internal models are used by the evaluation system itself.
+# They must not be treated as the project target model under test.
+INTERNAL_ATTACK_MODEL_NAME = env("INTERNAL_ATTACK_MODEL_NAME", env("DEFAULT_MODEL_NAME", "moonshot-v1-8k"))
+INTERNAL_JUDGE_MODEL_NAME = env("INTERNAL_JUDGE_MODEL_NAME", env("DEFAULT_EVAL_MODEL_NAME", "deepseek-v3"))
+INTERNAL_RECOMMENDATION_MODEL_NAME = env("INTERNAL_RECOMMENDATION_MODEL_NAME", INTERNAL_JUDGE_MODEL_NAME)
+
+# Backward-compatible aliases for older code paths.
+DEFAULT_MODEL_NAME = INTERNAL_ATTACK_MODEL_NAME
+DEFAULT_EVAL_MODEL_NAME = INTERNAL_JUDGE_MODEL_NAME
 
 REDIS_URL = env("REDIS_URL", "redis://127.0.0.1:6379/0")
 REDIS_CACHE_URL = env("REDIS_CACHE_URL", "redis://127.0.0.1:6379/1")
+
+CHROMA_BASE_URL = env("CHROMA_BASE_URL", "http://127.0.0.1:8001")
+CHROMA_COLLECTION_NAME = env("CHROMA_COLLECTION_NAME", "ai_evaluation_rag")
+CHROMA_COLLECTION_PREFIX = env("CHROMA_COLLECTION_PREFIX", "ai_eval_rag")
+CHROMA_TIMEOUT = env_int("CHROMA_TIMEOUT", 30)
+RAG_FAIL_OPEN_TO_KEYWORD = env_bool("RAG_FAIL_OPEN_TO_KEYWORD", True)
+
+OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_EMBEDDING_MODEL = env("OLLAMA_EMBEDDING_MODEL", "bge-m3")
+OLLAMA_EMBEDDING_TIMEOUT = env_int("OLLAMA_EMBEDDING_TIMEOUT", 120)
 
 CHANNEL_LAYERS = {
     "default": {

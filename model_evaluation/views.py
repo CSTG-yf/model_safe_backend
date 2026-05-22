@@ -11,6 +11,7 @@ from projects.models import Project
 from question_bank.models import EvalQuestions
 from django.http import Http404
 from rest_framework.exceptions import PermissionDenied
+from django.conf import settings
 from jailbreak_evaluation.utils import JailbreakService
 from .services import get_evaluation_progress, check_user_cancelled, cancel_model_evaluation
 from core.permissions import user_has_project_role
@@ -83,7 +84,7 @@ class EvaluationCreateView(ProjectScopedAPIView):
         evaluation_batch = EvaluationBatch.objects.create(
             project=project,
             model_name=data.get("model_name", project.ai_model_name),#被测主模型
-            evaluator_model_name=data.get("evaluation_model_name", "deepseek-chat"),#判题模型
+            evaluator_model_name=data.get("evaluation_model_name", getattr(settings, "INTERNAL_JUDGE_MODEL_NAME", "deepseek-chat")),#平台内置判题模型
             name=data.get("evaluation_name", "未命名评估"),
             description=data.get("evaluation_description", ""),
         )

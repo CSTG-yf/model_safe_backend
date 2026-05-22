@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import ReportGenerationAPIView, ReportDetailAPIView
+from .views import CompetitionPackageAPIView, ReportDiagnosticDataAPIView, ReportGenerationAPIView, ReportDetailAPIView
 
 urlpatterns = [
     # 项目报告集合操作
@@ -13,5 +13,15 @@ urlpatterns = [
         'report/<int:report_id>/',
         ReportDetailAPIView.as_view(),
         name='report-generation-detail'
+    ),
+    path(
+        'diagnostic-data/',
+        ReportDiagnosticDataAPIView.as_view(),
+        name='report-diagnostic-data'
+    ),
+    path(
+        'competition-package/',
+        CompetitionPackageAPIView.as_view(),
+        name='report-competition-package'
     ),
 ]

@@ -1,0 +1,160 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ai-eval-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-ai}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-ai_password}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - "${DB_PORT_PUBLIC:-3306}:3306"
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+    networks:
+      - ai-eval-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-eval-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT_PUBLIC:-6379}:6379"
+    volumes:
+      - ./redis_data:/data
+    networks:
+      - ai-eval-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  chroma:
+    image: chromadb/chroma:0.5.23
+    container_name: ai-eval-chroma
+    restart: unless-stopped
+    ports:
+      - "${CHROMA_PORT_PUBLIC:-8001}:8000"
+    volumes:
+      - ./chroma_data:/data
+    networks:
+      - ai-eval-network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-eval-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT_PUBLIC:-11434}:11434"
+    volumes:
+      - ./ollama_models:/root/.ollama
+      - ./scripts:/scripts
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_KEEP_ALIVE: 5m
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+      OLLAMA_ORIGINS: "*"
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
+    command: ["/bin/sh", "/scripts/ollama-entrypoint.sh"]
+    networks:
+      - ai-eval-network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  web:
+    build: .
+    container_name: ai-eval-web
+    restart: unless-stopped
+    command: >
+      sh -c "uv run python manage.py migrate --noinput &&
+             uv run python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "${WEB_PORT_PUBLIC:-8000}:8000"
+    volumes:
+      - .:/app
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,web}
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+      UV_CACHE_DIR: /tmp/uv-cache
+      DB_ENGINE: django.db.backends.mysql
+      DB_NAME: ${DB_NAME:-ai}
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-ai_password}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      CHROMA_BASE_URL: http://chroma:8000
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
+      ONE_API_BASE_URL: ${ONE_API_BASE_URL:-http://host.docker.internal:3000/v1}
+      ONE_API_KEY: ${ONE_API_KEY:-}
+      INTERNAL_ATTACK_MODEL_NAME: ${INTERNAL_ATTACK_MODEL_NAME:-moonshot-v1-8k}
+      INTERNAL_JUDGE_MODEL_NAME: ${INTERNAL_JUDGE_MODEL_NAME:-deepseek-v3}
+      INTERNAL_RECOMMENDATION_MODEL_NAME: ${INTERNAL_RECOMMENDATION_MODEL_NAME:-deepseek-v3}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+      ollama:
+        condition: service_started
+    networks:
+      - ai-eval-network
+
+  celery-worker:
+    build: .
+    container_name: ai-eval-celery-worker
+    restart: unless-stopped
+    command: uv run celery -A ai_evaluation worker -l info
+    volumes:
+      - .:/app
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+      UV_CACHE_DIR: /tmp/uv-cache
+      DB_ENGINE: django.db.backends.mysql
+      DB_NAME: ${DB_NAME:-ai}
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-ai_password}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      CHROMA_BASE_URL: http://chroma:8000
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
+      ONE_API_BASE_URL: ${ONE_API_BASE_URL:-http://host.docker.internal:3000/v1}
+      ONE_API_KEY: ${ONE_API_KEY:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-eval-network
+
+networks:
+  ai-eval-network:
+    driver: bridge

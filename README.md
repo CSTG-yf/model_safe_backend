@@ -2,11 +2,11 @@
 
 ## Local Setup
 
-1. Create a Python 3.11+ virtual environment.
+1. Install uv and use Python 3.11.
 2. Install dependencies:
 
    ```bash
-   pip install -r requirements.txt
+   uv sync
    ```
 
 3. Copy `.env.example` to `.env` and fill in local values:
@@ -28,16 +28,45 @@
 5. Run migrations:
 
    ```bash
-   python manage.py migrate
+   uv run python manage.py migrate
    ```
 
 6. Start the backend:
 
    ```bash
-   python manage.py runserver 127.0.0.1:8000
+   uv run python manage.py runserver 127.0.0.1:8000
    ```
 
    Or use `run.bat` if the local Python path inside that script has been adjusted.
+
+## Dependency Management
+
+- If the default Windows uv cache has permission issues, set a project-local cache:
+
+  ```powershell
+  $env:UV_CACHE_DIR = ".uv-cache"
+  ```
+
+- `pyproject.toml` is the source of truth for Python dependencies.
+- `uv.lock` pins the resolved dependency graph for repeatable installs.
+- Use `uv add package-name` to add a dependency.
+- Use `uv remove package-name` to remove a dependency.
+- Use `uv lock` after manual dependency edits.
+- Keep `requirements.txt` only as a compatibility export for older scripts:
+
+  ```bash
+  uv export --format requirements-txt --no-hashes -o requirements.txt
+  ```
+
+## Docker Setup
+
+Run the full backend stack:
+
+```bash
+docker compose up --build
+```
+
+The Docker image installs dependencies with uv into `/opt/venv`. This avoids conflicts when the project source is bind-mounted into `/app`.
 
 ## Runtime Services
 
