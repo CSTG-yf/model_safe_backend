@@ -43,6 +43,12 @@ docker-compose.override.yml
 docker-compose.local.yml
 *.local.yml
 
+# Docker runtime data
+mysql_data/
+redis_data/
+chroma_data/
+ollama_models/
+
 # Local test artifacts
 test-results/
 junit*.xml

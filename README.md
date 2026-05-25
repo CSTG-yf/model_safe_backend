@@ -68,6 +68,8 @@ docker compose up --build
 
 The Docker image installs dependencies with uv into `/opt/venv`. This avoids conflicts when the project source is bind-mounted into `/app`.
 
+By default, Docker exposes MySQL on `127.0.0.1:3307` while containers still use port `3306` internally. If you need a different host port, set `DB_PORT_PUBLIC` in `.env`.
+
 ## Runtime Services
 
 - Django REST API: `http://127.0.0.1:8000/api/`

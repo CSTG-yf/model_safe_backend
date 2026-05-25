@@ -9,7 +9,7 @@ services:
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
       MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
     ports:
-      - "${DB_PORT_PUBLIC:-3306}:3306"
+      - "${DB_PORT_PUBLIC:-3307}:3306"
     volumes:
       - ./mysql_data:/var/lib/mysql
     networks:
@@ -63,7 +63,7 @@ services:
       OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
       OLLAMA_ORIGINS: "*"
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
-    command: ["/bin/sh", "/scripts/ollama-entrypoint.sh"]
+    entrypoint: ["/bin/sh", "/scripts/ollama-entrypoint.sh"]
     networks:
       - ai-eval-network
     healthcheck:
