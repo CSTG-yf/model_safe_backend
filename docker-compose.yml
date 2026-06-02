@@ -103,7 +103,9 @@ services:
       CHROMA_BASE_URL: http://chroma:8000
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
-      ONE_API_BASE_URL: ${ONE_API_BASE_URL:-http://host.docker.internal:3000/v1}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      ONE_API_BASE_URL: ${ONE_API_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       ONE_API_KEY: ${ONE_API_KEY:-}
       INTERNAL_ATTACK_MODEL_NAME: ${INTERNAL_ATTACK_MODEL_NAME:-moonshot-v1-8k}
       INTERNAL_JUDGE_MODEL_NAME: ${INTERNAL_JUDGE_MODEL_NAME:-deepseek-v3}
@@ -145,7 +147,9 @@ services:
       CHROMA_BASE_URL: http://chroma:8000
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
-      ONE_API_BASE_URL: ${ONE_API_BASE_URL:-http://host.docker.internal:3000/v1}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      ONE_API_BASE_URL: ${ONE_API_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       ONE_API_KEY: ${ONE_API_KEY:-}
     depends_on:
       mysql:

@@ -67,17 +67,21 @@ class ModelGateway:
 
         return ModelProvider(
             name="default",
-            provider_type="one_api",
-            base_url=os.environ.get("ONE_API_BASE_URL", "http://127.0.0.1:3000/v1"),
-            api_key_env="ONE_API_KEY",
+            provider_type="dashscope",
+            base_url=getattr(settings, "DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+            api_key_env=getattr(settings, "DASHSCOPE_API_KEY_ENV", "DASHSCOPE_API_KEY"),
             default_model=getattr(settings, "DEFAULT_MODEL_NAME", ""),
         )
 
     @staticmethod
     def _resolve_api_key(provider):
         if provider.api_key_env:
-            return os.environ.get(provider.api_key_env, "")
-        return os.environ.get("ONE_API_KEY", "")
+            api_key = os.environ.get(provider.api_key_env, "")
+            if api_key:
+                return api_key
+        primary_env = getattr(settings, "DASHSCOPE_API_KEY_ENV", "DASHSCOPE_API_KEY")
+        fallback_env = getattr(settings, "DASHSCOPE_FALLBACK_API_KEY_ENV", "ONE_API_KEY")
+        return os.environ.get(primary_env, "") or os.environ.get(fallback_env, "")
 
     def chat(self, request: ChatRequest) -> ChatResult:
         params = {

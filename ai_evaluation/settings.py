@@ -96,6 +96,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "core.middleware.RequestIDMiddleware",
+    "core.middleware.APIRequestLogMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -186,6 +187,25 @@ INTERNAL_RECOMMENDATION_MODEL_NAME = env("INTERNAL_RECOMMENDATION_MODEL_NAME", I
 DEFAULT_MODEL_NAME = INTERNAL_ATTACK_MODEL_NAME
 DEFAULT_EVAL_MODEL_NAME = INTERNAL_JUDGE_MODEL_NAME
 
+# Project target models that users are allowed to select and evaluate.
+# Add or remove explicitly testable models here; the frontend reads this list
+# from /api/models/evaluable/.
+EVALUABLE_MODEL_NAMES = [
+    "qwen3.7-plus",
+    "qwen3.7-max",
+    "qwen3.6-plus",
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
+    "glm-5.1",
+]
+
+DASHSCOPE_API_KEY_ENV = "DASHSCOPE_API_KEY"
+DASHSCOPE_FALLBACK_API_KEY_ENV = "ONE_API_KEY"
+DASHSCOPE_BASE_URL = env(
+    "DASHSCOPE_BASE_URL",
+    env("ONE_API_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+)
+
 REDIS_URL = env("REDIS_URL", "redis://127.0.0.1:6379/0")
 REDIS_CACHE_URL = env("REDIS_CACHE_URL", "redis://127.0.0.1:6379/1")
 
@@ -242,6 +262,14 @@ LOGGING = {
             "encoding": "utf-8",
             "formatter": "standard",
         },
+        "api_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_DIR / "api.log",
+            "maxBytes": env_int("API_LOG_MAX_BYTES", 10 * 1024 * 1024),
+            "backupCount": env_int("API_LOG_BACKUP_COUNT", 10),
+            "encoding": "utf-8",
+            "formatter": "standard",
+        },
     },
     "root": {
         "handlers": ["console", "app_file"],
@@ -251,6 +279,11 @@ LOGGING = {
         "django.request": {
             "handlers": ["console", "app_file"],
             "level": "WARNING",
+            "propagate": False,
+        },
+        "api.debug": {
+            "handlers": ["console", "api_file"],
+            "level": env("API_LOG_LEVEL", "INFO"),
             "propagate": False,
         },
         "celery": {

@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Any, Tuple
 
+from django.conf import settings
 from openai import OpenAI
 
 
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_available_models() -> list[str]:
-    logger.info("Fetching available models from OneAPI")
+    logger.info("Fetching available models from DashScope-compatible endpoint")
     try:
         client = OpenAI(
             api_key=OneAPIClient.API_KEY,
@@ -23,13 +24,19 @@ def get_available_models() -> list[str]:
 
 
 class OneAPIClient:
-    API_BASE_URL = os.environ.get("ONE_API_BASE_URL", "http://127.0.0.1:3000/v1")
-    API_KEY = os.environ.get("ONE_API_KEY", "")
+    API_BASE_URL = os.environ.get(
+        "DASHSCOPE_BASE_URL",
+        os.environ.get("ONE_API_BASE_URL", getattr(settings, "DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")),
+    )
+    API_KEY = os.environ.get(getattr(settings, "DASHSCOPE_API_KEY_ENV", "DASHSCOPE_API_KEY"), "") or os.environ.get(
+        getattr(settings, "DASHSCOPE_FALLBACK_API_KEY_ENV", "ONE_API_KEY"),
+        "",
+    )
 
     def __init__(self, model: str):
         self.model = model
         if not self.API_KEY:
-            raise ValueError("ONE_API_KEY is not configured.")
+            raise ValueError("DASHSCOPE_API_KEY or ONE_API_KEY is not configured.")
 
         self.client = OpenAI(
             api_key=self.API_KEY,
